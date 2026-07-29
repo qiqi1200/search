@@ -237,7 +237,7 @@ class _NewTabPageState extends State<NewTabPage>
   }
 }
 
-// Yanler 艺术字体 Logo
+// Yanler 艺术字体 Logo + 图标
 class _YanlerLogo extends StatelessWidget {
   final bool isDark;
 
@@ -245,48 +245,65 @@ class _YanlerLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ShaderMask(
-      shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          isDark
-              ? const Color(0xFF7B9FFF)
-              : const Color(0xFF5B7FFF),
-          isDark
-              ? const Color(0xFFA07BFF)
-              : const Color(0xFF8B5CFF),
-          isDark
-              ? const Color(0xFFFF7B9F)
-              : const Color(0xFFFF5C7B),
-        ],
-      ).createShader(bounds),
-      child: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(
-              text: 'Y',
-              style: TextStyle(
-                fontSize: 64,
-                fontWeight: FontWeight.w200,
-                letterSpacing: -2,
-                color: Colors.white,
-                fontFamily: 'serif',
-              ),
-            ),
-            TextSpan(
-              text: 'anler',
-              style: TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 6,
-                color: Colors.white,
-                fontFamily: 'serif',
-              ),
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 图标
+        ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Image.asset(
+            'assets/fonts/yanler_icon.png',
+            width: 72,
+            height: 72,
+            fit: BoxFit.cover,
+          ),
         ),
-      ),
+        const SizedBox(height: 12),
+        // 文字 Logo
+        ShaderMask(
+          shaderCallback: (bounds) => LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              isDark
+                  ? const Color(0xFF7B9FFF)
+                  : const Color(0xFF5B7FFF),
+              isDark
+                  ? const Color(0xFFA07BFF)
+                  : const Color(0xFF8B5CFF),
+              isDark
+                  ? const Color(0xFFFF7B9F)
+                  : const Color(0xFFFF5C7B),
+            ],
+          ).createShader(bounds),
+          child: RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: 'Y',
+                  style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.w200,
+                    letterSpacing: -2,
+                    color: Colors.white,
+                    fontFamily: 'serif',
+                  ),
+                ),
+                TextSpan(
+                  text: 'anler',
+                  style: TextStyle(
+                    fontSize: 40,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 6,
+                    color: Colors.white,
+                    fontFamily: 'serif',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
