@@ -115,10 +115,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                 BottomBar(
                   tabCount: browser.tabCount,
                   isIncognito: browser.isIncognitoMode,
-                  onNewTab: () => browser.addTab(),
                   onTabSwitch: () => _showTabSwitcher(context),
                   onMenu: () => _showMenu(context),
-                  isOnNewTab: isOnNewTab,
                 ),
               ],
             ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../core/utils/poem_database.dart';
 import '../../search/search_service.dart';
@@ -13,75 +12,127 @@ class NewTabPage extends StatefulWidget {
 
 class _NewTabPageState extends State<NewTabPage>
     with SingleTickerProviderStateMixin {
-  late AnimationController _animController;
-  late Animation<double> _fadeAnim;
-  late Animation<double> _scaleAnim;
+  // 动画
+  late AnimationController _fadeOutCtrl;
+  late AnimationController _fadeInCtrl;
+  late Animation<double> _fadeOutAnim;
+  late Animation<double> _fadeInAnim;
 
+  // 打字机
   ChinesePoem _currentPoem = PoemDatabase.randomPoem;
-  Timer? _poemTimer;
   int _charIndex = 0;
   String _displayedPoem = '';
+
+  // 状态: true=显示Yanler, false=显示诗词
+  bool _showLogo = true;
+  Timer? _cycleTimer;
+  Timer? _typeTimer;
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+    _fadeOutCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 600),
     );
-    _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOut),
+    _fadeInCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
     );
-    _scaleAnim = Tween<double>(begin: 0.95, end: 1.0).animate(
-      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    _fadeOutAnim = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _fadeOutCtrl, curve: Curves.easeOut),
+    );
+    _fadeInAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeInCtrl, curve: Curves.easeIn),
     );
 
-    _animController.forward();
-    _startPoemCycle();
+    // 入场显示 Logo
+    _fadeInCtrl.forward();
+
+    // 启动循环: 显示Logo 4.5秒 → 切诗词 → 显示诗词 6秒 → 切回Logo
+    _startCycle();
   }
 
-  void _startPoemCycle() {
-    _poemTimer = Timer.periodic(const Duration(seconds: 6), (_) {
-      _switchToRandomPoem();
+  void _startCycle() {
+    _cycleTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+      // 由 _onTimerTick 统一调度
     });
+    _scheduleNext();
   }
 
-  void _switchToRandomPoem() {
+  int _phase = 0; // 0=显示logo, 1=显示诗词
+  void _scheduleNext() {
+    if (_phase == 0) {
+      // 显示 Logo 4.5 秒后切到诗词
+      _cycleTimer?.cancel();
+      _cycleTimer = Timer(const Duration(milliseconds: 4500), () {
+        _switchToPoem();
+        _phase = 1;
+        _scheduleNext();
+      });
+    } else {
+      // 显示诗词 6 秒后切回 Logo
+      _cycleTimer?.cancel();
+      _cycleTimer = Timer(const Duration(milliseconds: 6000), () {
+        _switchToLogo();
+        _phase = 0;
+        _scheduleNext();
+      });
+    }
+  }
+
+  void _switchToPoem() {
+    // 选择新诗词
     ChinesePoem newPoem;
     do {
       newPoem = PoemDatabase.randomPoem;
     } while (newPoem.content == _currentPoem.content);
+    _currentPoem = newPoem;
+    _charIndex = 0;
+    _displayedPoem = '';
 
-    setState(() {
-      _currentPoem = newPoem;
-      _charIndex = 0;
-      _displayedPoem = '';
+    // 淡出 Logo
+    _fadeOutCtrl.reset();
+    _fadeOutCtrl.forward().then((_) {
+      setState(() => _showLogo = false);
+      _fadeInCtrl.reset();
+      _fadeInCtrl.forward();
+      // 打字机逐字输出
+      _typeTimer?.cancel();
+      _typeTimer = Timer.periodic(const Duration(milliseconds: 55), (t) {
+        if (_charIndex < _currentPoem.content.length) {
+          setState(() {
+            _charIndex++;
+            _displayedPoem = _currentPoem.content.substring(0, _charIndex);
+          });
+        } else {
+          t.cancel();
+        }
+      });
     });
-
-    _animController.reset();
-    _animController.forward();
-
-    // 打字机逐字效果
-    _typePoem();
   }
 
-  void _typePoem() {
-    Timer.periodic(const Duration(milliseconds: 60), (timer) {
-      if (_charIndex < _currentPoem.content.length) {
-        setState(() {
-          _charIndex++;
-          _displayedPoem = _currentPoem.content.substring(0, _charIndex);
-        });
-      } else {
-        timer.cancel();
-      }
+  void _switchToLogo() {
+    // 淡出诗词
+    _fadeOutCtrl.reset();
+    _fadeOutCtrl.forward().then((_) {
+      _typeTimer?.cancel();
+      setState(() {
+        _showLogo = true;
+        _displayedPoem = '';
+        _charIndex = 0;
+      });
+      _fadeInCtrl.reset();
+      _fadeInCtrl.forward();
     });
   }
 
   @override
   void dispose() {
-    _animController.dispose();
-    _poemTimer?.cancel();
+    _fadeOutCtrl.dispose();
+    _fadeInCtrl.dispose();
+    _cycleTimer?.cancel();
+    _typeTimer?.cancel();
     super.dispose();
   }
 
@@ -109,120 +160,91 @@ class _NewTabPageState extends State<NewTabPage>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(height: 60),
+              const SizedBox(height: 80),
 
-              // Yanler 艺术字体 Logo
-              AnimatedBuilder(
-                animation: _animController,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _fadeAnim.value,
-                    child: Transform.scale(
-                      scale: _scaleAnim.value,
-                      child: child,
-                    ),
-                  );
-                },
-                child: _YanlerLogo(isDark: isDark),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Slogan
-              AnimatedBuilder(
-                animation: _animController,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: max(0, _fadeAnim.value - 0.3) / 0.7,
-                    child: child,
-                  );
-                },
-                child: Text(
-                  '纯净搜索，无扰浏览',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                    letterSpacing: 4,
-                  ),
+              // Yanler 图标（始终显示）
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset(
+                  'assets/fonts/yanler_icon.png',
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
                 ),
               ),
 
-              const SizedBox(height: 48),
+              const SizedBox(height: 16),
 
-              // 搜索框
-              _SearchInput(onSubmit: _onSearch),
-
-              const SizedBox(height: 48),
-
-              // 诗词区域
-              GestureDetector(
-                onTap: _switchToRandomPoem,
-                child: AnimatedBuilder(
-                  animation: _animController,
-                  builder: (context, child) {
-                    return Opacity(
-                      opacity: max(0, _fadeAnim.value - 0.5) / 0.5,
-                      child: child,
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      // 诗句
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeOutCubic,
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 400),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.06)
-                                  : Colors.black.withValues(alpha: 0.06),
-                            ),
-                          ),
-                          child: Text(
-                            _displayedPoem + (_charIndex < _currentPoem.content.length ? '▊' : ''),
+              // 交替区域：Yanler 文字 ↔ 诗词
+              SizedBox(
+                height: 90,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Yanler Logo
+                    AnimatedBuilder(
+                      animation: _showLogo ? _fadeInAnim : _fadeOutAnim,
+                      builder: (context, child) {
+                        return Opacity(
+                          opacity: _showLogo
+                              ? _fadeInAnim.value
+                              : _fadeOutAnim.value,
+                          child: child,
+                        );
+                      },
+                      child: _YanlerText(isDark: isDark),
+                    ),
+                    // 诗词
+                    AnimatedBuilder(
+                      animation: _showLogo ? _fadeOutAnim : _fadeInAnim,
+                      builder: (context, child) {
+                        return Opacity(
+                          opacity: _showLogo
+                              ? _fadeOutAnim.value
+                              : _fadeInAnim.value,
+                          child: child,
+                        );
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _displayedPoem +
+                                (_charIndex < _currentPoem.content.length
+                                    ? '▊'
+                                    : ''),
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 16,
-                              height: 1.6,
+                              fontSize: 15,
+                              height: 1.5,
                               color: theme.colorScheme.onSurface,
                               fontStyle: FontStyle.italic,
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // 出处
-                      if (_charIndex >= _currentPoem.content.length)
-                        FadeTransition(
-                          opacity: CurvedAnimation(
-                            parent: AnimationController(
-                              vsync: this,
-                              duration: const Duration(milliseconds: 500),
-                            )..forward(),
-                            curve: Curves.easeIn,
-                          ),
-                          child: Text(
-                            '—— ${_currentPoem.author} 《${_currentPoem.title}》',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
+                          if (_charIndex >= _currentPoem.content.length)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                '—— ${_currentPoem.author}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             ),
-                          ),
-                        ),
-                    ],
-                  ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              const SizedBox(height: 60),
+              const SizedBox(height: 40),
+
+              // 搜索框
+              _SearchInput(onSubmit: _onSearch),
+
+              const SizedBox(height: 80),
             ],
           ),
         ),
@@ -231,79 +253,54 @@ class _NewTabPageState extends State<NewTabPage>
   }
 
   void _onSearch(String query) {
-    // Navigate to search directly
     final searchService = SearchService();
     searchService.openSearch(context, query);
   }
 }
 
-// Yanler 艺术字体 Logo + 图标
-class _YanlerLogo extends StatelessWidget {
+// Yanler 文字 Logo
+class _YanlerText extends StatelessWidget {
   final bool isDark;
-
-  const _YanlerLogo({required this.isDark});
+  const _YanlerText({required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 图标
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            'assets/fonts/yanler_icon.png',
-            width: 72,
-            height: 72,
-            fit: BoxFit.cover,
-          ),
-        ),
-        const SizedBox(height: 12),
-        // 文字 Logo
-        ShaderMask(
-          shaderCallback: (bounds) => LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              isDark
-                  ? const Color(0xFF7B9FFF)
-                  : const Color(0xFF5B7FFF),
-              isDark
-                  ? const Color(0xFFA07BFF)
-                  : const Color(0xFF8B5CFF),
-              isDark
-                  ? const Color(0xFFFF7B9F)
-                  : const Color(0xFFFF5C7B),
-            ],
-          ).createShader(bounds),
-          child: RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: 'Y',
-                  style: TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.w200,
-                    letterSpacing: -2,
-                    color: Colors.white,
-                    fontFamily: 'serif',
-                  ),
-                ),
-                TextSpan(
-                  text: 'anler',
-                  style: TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: 6,
-                    color: Colors.white,
-                    fontFamily: 'serif',
-                  ),
-                ),
-              ],
+    return ShaderMask(
+      shaderCallback: (bounds) => LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          isDark ? const Color(0xFF7B9FFF) : const Color(0xFF5B7FFF),
+          isDark ? const Color(0xFFA07BFF) : const Color(0xFF8B5CFF),
+          isDark ? const Color(0xFFFF7B9F) : const Color(0xFFFF5C7B),
+        ],
+      ).createShader(bounds),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: 'Y',
+              style: TextStyle(
+                fontSize: 50,
+                fontWeight: FontWeight.w200,
+                letterSpacing: -2,
+                color: Colors.white,
+                fontFamily: 'serif',
+              ),
             ),
-          ),
+            TextSpan(
+              text: 'anler',
+              style: TextStyle(
+                fontSize: 36,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 6,
+                color: Colors.white,
+                fontFamily: 'serif',
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -311,7 +308,6 @@ class _YanlerLogo extends StatelessWidget {
 // 搜索输入框
 class _SearchInput extends StatefulWidget {
   final void Function(String) onSubmit;
-
   const _SearchInput({required this.onSubmit});
 
   @override
@@ -335,13 +331,13 @@ class _SearchInputState extends State<_SearchInput> {
     final theme = Theme.of(context);
 
     return Container(
-      constraints: const BoxConstraints(maxWidth: 500),
-      height: 52,
+      constraints: const BoxConstraints(maxWidth: 480),
+      height: 48,
       decoration: BoxDecoration(
         color: isDark
             ? const Color(0xFF2A2A2E).withValues(alpha: 0.8)
             : Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -359,47 +355,38 @@ class _SearchInputState extends State<_SearchInput> {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 20),
-          Icon(
-            Icons.search,
-            size: 20,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 18),
+          Icon(Icons.search, size: 18, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
               decoration: InputDecoration(
-                hintText: '搜索或输入网址...',
+                hintText: '搜索或输入网址',
                 hintStyle: TextStyle(
                   color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                  fontSize: 15,
+                  fontSize: 14,
                 ),
                 border: InputBorder.none,
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(vertical: 13),
               ),
-              style: TextStyle(
-                fontSize: 15,
-                color: theme.colorScheme.onSurface,
-              ),
+              style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
               textInputAction: TextInputAction.go,
               onSubmitted: (value) {
-                if (value.trim().isNotEmpty) {
-                  widget.onSubmit(value.trim());
-                }
+                if (value.trim().isNotEmpty) widget.onSubmit(value.trim());
               },
             ),
           ),
           Container(
-            margin: const EdgeInsets.all(6),
+            margin: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(19),
             ),
             child: IconButton(
-              icon: const Icon(Icons.arrow_forward, size: 18, color: Colors.white),
+              icon: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
               onPressed: () {
                 if (_controller.text.trim().isNotEmpty) {
                   widget.onSubmit(_controller.text.trim());
