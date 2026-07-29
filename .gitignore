@@ -6,6 +6,8 @@ build/
 *.iml
 .idea/
 .metadata
+.flutter-plugins
+.flutter-plugins-dependencies
 
 # Android
 android/.gradle/
