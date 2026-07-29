@@ -1,0 +1,82 @@
+name: Release APK & Windows
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.1)'
+        required: true
+        type: string
+
+jobs:
+  build_apk:
+    name: Build & Upload APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK (all ABIs)
+        run: flutter build apk --release --split-per-abi
+
+      - name: Build universal APK
+        run: flutter build apk --release
+
+      - name: Upload to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/app/outputs/flutter-apk/app-release.apk
+          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}.apk
+          tag: ${{ github.event.inputs.version || github.ref_name }}
+          overwrite: true
+
+      - name: Upload split APKs to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-armv7a.apk
+          tag: ${{ github.event.inputs.version || github.ref_name }}
+          overwrite: true
+
+  build_windows:
+    name: Build & Upload Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Zip build
+        run: |
+          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath Yanler-Windows-x64.zip
+
+      - name: Upload to Release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: Yanler-Windows-x64.zip
+          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-windows-x64.zip
+          tag: ${{ github.event.inputs.version || github.ref_name }}
+          overwrite: true
