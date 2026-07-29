@@ -13,6 +13,11 @@ class SearchEngine {
 class SearchEngines {
   static const List<SearchEngine> engines = [
     SearchEngine(
+      name: 'Yanler Search',
+      url: 'http://localhost:8080/search?q=',
+      iconUrl: 'https://www.google.com/favicon.ico',
+    ),
+    SearchEngine(
       name: 'DuckDuckGo',
       url: 'https://duckduckgo.com/?q=',
       iconUrl: 'https://duckduckgo.com/favicon.ico',

@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.light;
-  String _searchEngine = 'DuckDuckGo';
+  String _searchEngine = 'Yanler Search';
   bool _adblockEnabled = true;
   bool _doNotTrack = true;
   bool _blockThirdPartyCookies = true;
@@ -30,7 +30,7 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _themeMode =
         prefs.getBool('darkMode') == true ? ThemeMode.dark : ThemeMode.light;
-    _searchEngine = prefs.getString('searchEngine') ?? 'DuckDuckGo';
+    _searchEngine = prefs.getString('searchEngine') ?? 'Yanler Search';
     _adblockEnabled = prefs.getBool('adblockEnabled') ?? true;
     _doNotTrack = prefs.getBool('doNotTrack') ?? true;
     _blockThirdPartyCookies =

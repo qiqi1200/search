@@ -23,11 +23,15 @@ class AdblockEngine extends ChangeNotifier {
   final List<AdblockRule> _rules = [];
   bool _isInitialized = false;
   bool _isEnabled = true;
+  int _blockedCount = 0;
+  final List<String> _blockedUrls = [];
 
   bool get isInitialized => _isInitialized;
   bool get isEnabled => _isEnabled;
   List<AdblockRule> get rules => List.unmodifiable(_rules);
   int get ruleCount => _rules.length;
+  int get blockedCount => _blockedCount;
+  List<String> get blockedUrls => List.unmodifiable(_blockedUrls);
 
   // 基础规则（离线可用 — EasyList 核心子集）
   static const List<String> _builtInRules = [
@@ -355,11 +359,22 @@ class AdblockEngine extends ChangeNotifier {
     // 再检查拦截规则
     for (final rule in _rules) {
       if (!rule.isException && _matchRule(rule, urlLower)) {
+        _blockedCount++;
+        if (_blockedUrls.length < 50) {
+          _blockedUrls.add(url.length > 80 ? '${url.substring(0, 80)}...' : url);
+        }
+        notifyListeners();
         return true;
       }
     }
 
     return false;
+  }
+
+  void resetStats() {
+    _blockedCount = 0;
+    _blockedUrls.clear();
+    notifyListeners();
   }
 
   bool _matchRule(AdblockRule rule, String urlLower) {

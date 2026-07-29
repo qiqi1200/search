@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/settings_provider.dart';
+import '../../adblock/adblock_engine.dart';
 
 class WebViewContainer extends StatefulWidget {
   final String tabId;
@@ -41,6 +43,7 @@ class _WebViewContainerState extends State<WebViewContainer> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final adblock = context.watch<AdblockEngine>();
 
     if (widget.initialUrl.isEmpty) {
       return const SizedBox.shrink();
@@ -58,6 +61,17 @@ class _WebViewContainerState extends State<WebViewContainer> {
       ),
       onWebViewCreated: (controller) {
         widget.onControllerReady?.call(controller);
+      },
+      shouldInterceptRequest: (controller, request) async {
+        final url = request.url.toString();
+        if (adblock.shouldBlock(url, null)) {
+          // 返回空响应拦截广告
+          return WebResourceResponse(
+            contentType: 'text/plain',
+            data: Uint8List.fromList([]),
+          );
+        }
+        return null;
       },
       onLoadStart: (controller, url) {
         widget.onLoadingChanged(true);

@@ -6,6 +6,7 @@ import '../../../providers/settings_provider.dart';
 import '../../../core/constants/search_engines.dart';
 import '../../../providers/ai_provider.dart';
 import '../../settings/settings_screen.dart';
+import '../../adblock/adblock_engine.dart';
 import '../widgets/address_bar.dart';
 import '../widgets/bottom_bar.dart';
 import '../widgets/tab_switcher.dart';
@@ -73,6 +74,7 @@ class _BrowserScreenState extends State<BrowserScreen>
     return Consumer2<BrowserProvider, SettingsProvider>(
       builder: (context, browser, settings, _) {
         final isOnNewTab = browser.activeTab?.url.isEmpty ?? true;
+        final adblock = context.watch<AdblockEngine>();
 
         return Scaffold(
           body: SafeArea(
@@ -132,6 +134,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   isIncognito: browser.isIncognitoMode,
                   canGoBack: _canGoBack,
                   canGoForward: _canGoForward,
+                  adBlockCount: adblock.blockedCount,
                   onBack: () => _webViewController?.goBack(),
                   onForward: () => _webViewController?.goForward(),
                   onHome: () => _goHome(browser),

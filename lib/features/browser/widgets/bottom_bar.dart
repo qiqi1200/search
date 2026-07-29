@@ -5,6 +5,7 @@ class BottomBar extends StatelessWidget {
   final bool isIncognito;
   final bool canGoBack;
   final bool canGoForward;
+  final int adBlockCount;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onHome;
@@ -18,6 +19,7 @@ class BottomBar extends StatelessWidget {
     required this.isIncognito,
     required this.canGoBack,
     required this.canGoForward,
+    required this.adBlockCount,
     required this.onBack,
     required this.onForward,
     required this.onHome,
@@ -62,6 +64,26 @@ class BottomBar extends StatelessWidget {
             onTap: canGoForward ? onForward : null,
             theme: theme,
           ),
+
+          // 广告拦截计数
+          if (adBlockCount > 0)
+            Badge(
+              label: Text(
+                '$adBlockCount',
+                style: const TextStyle(fontSize: 10, color: Colors.white),
+              ),
+              child: Icon(
+                Icons.shield,
+                size: 20,
+                color: theme.colorScheme.primary.withValues(alpha: 0.7),
+              ),
+            )
+          else
+            Icon(
+              Icons.shield_outlined,
+              size: 20,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
 
           // AI — C位
           _AICenterButton(onTap: onAI, theme: theme),
