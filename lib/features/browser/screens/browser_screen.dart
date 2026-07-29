@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/settings_provider.dart';
@@ -22,6 +23,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
+  InAppWebViewController? _webViewController;
+  bool _canGoBack = false;
+  bool _canGoForward = false;
 
   @override
   void initState() {
@@ -108,6 +112,17 @@ class _BrowserScreenState extends State<BrowserScreen>
                               browser.setTabLoading(activeIndex, loading);
                             }
                           },
+                          onControllerReady: (controller) {
+                            _webViewController = controller;
+                          },
+                          onNavigationStateChanged: (canBack, canFwd) {
+                            if (mounted) {
+                              setState(() {
+                                _canGoBack = canBack;
+                                _canGoForward = canFwd;
+                              });
+                            }
+                          },
                         ),
                 ),
 
@@ -115,6 +130,12 @@ class _BrowserScreenState extends State<BrowserScreen>
                 BottomBar(
                   tabCount: browser.tabCount,
                   isIncognito: browser.isIncognitoMode,
+                  canGoBack: _canGoBack,
+                  canGoForward: _canGoForward,
+                  onBack: () => _webViewController?.goBack(),
+                  onForward: () => _webViewController?.goForward(),
+                  onHome: () => _goHome(browser),
+                  onAI: () => _toggleAI(context),
                   onTabSwitch: () => _showTabSwitcher(context),
                   onMenu: () => _showMenu(context),
                 ),
@@ -133,6 +154,19 @@ class _BrowserScreenState extends State<BrowserScreen>
       backgroundColor: Colors.transparent,
       builder: (_) => const TabSwitcherSheet(),
     );
+  }
+
+  void _goHome(BrowserProvider browser) {
+    // 回到新标签页
+    final activeIndex = browser.activeTabIndex;
+    if (activeIndex >= 0) {
+      browser.updateTabUrl(activeIndex, '');
+    }
+    setState(() {
+      _canGoBack = false;
+      _canGoForward = false;
+      _webViewController = null;
+    });
   }
 
   void _showMenu(BuildContext context) {

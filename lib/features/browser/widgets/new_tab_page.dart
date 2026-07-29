@@ -11,7 +11,7 @@ class NewTabPage extends StatefulWidget {
 }
 
 class _NewTabPageState extends State<NewTabPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   // 动画
   late AnimationController _fadeOutCtrl;
   late AnimationController _fadeInCtrl;
@@ -54,9 +54,6 @@ class _NewTabPageState extends State<NewTabPage>
   }
 
   void _startCycle() {
-    _cycleTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      // 由 _onTimerTick 统一调度
-    });
     _scheduleNext();
   }
 
@@ -170,6 +167,22 @@ class _NewTabPageState extends State<NewTabPage>
                   width: 64,
                   height: 64,
                   fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          theme.colorScheme.primary,
+                          theme.colorScheme.primary.withValues(alpha: 0.6),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(Icons.language, color: Colors.white, size: 32),
+                  ),
                 ),
               ),
 
@@ -276,7 +289,7 @@ class _YanlerText extends StatelessWidget {
         ],
       ).createShader(bounds),
       child: RichText(
-        text: TextSpan(
+        text: const TextSpan(
           children: [
             TextSpan(
               text: 'Y',

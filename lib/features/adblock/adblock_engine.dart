@@ -20,7 +20,7 @@ class AdblockRule {
 }
 
 class AdblockEngine extends ChangeNotifier {
-  List<AdblockRule> _rules = [];
+  final List<AdblockRule> _rules = [];
   bool _isInitialized = false;
   bool _isEnabled = true;
 

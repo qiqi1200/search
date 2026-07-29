@@ -11,7 +11,7 @@ class ChinesePoem {
 }
 
 class PoemDatabase {
-  static final List<ChinesePoem> poems = [
+  static const List<ChinesePoem> poems = [
     ChinesePoem(content: '人生若只如初见，何事秋风悲画扇', author: '纳兰性德', title: '木兰花·拟古决绝词柬友'),
     ChinesePoem(content: '众里寻他千百度，蓦然回首，那人却在，灯火阑珊处', author: '辛弃疾', title: '青玉案·元夕'),
     ChinesePoem(content: '但愿人长久，千里共婵娟', author: '苏轼', title: '水调歌头'),

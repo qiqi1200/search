@@ -9,6 +9,8 @@ class WebViewContainer extends StatefulWidget {
   final Function(String) onUrlChanged;
   final Function(String) onTitleChanged;
   final Function(bool) onLoadingChanged;
+  final Function(InAppWebViewController)? onControllerReady;
+  final Function(bool canGoBack, bool canGoForward)? onNavigationStateChanged;
 
   const WebViewContainer({
     super.key,
@@ -17,6 +19,8 @@ class WebViewContainer extends StatefulWidget {
     required this.onUrlChanged,
     required this.onTitleChanged,
     required this.onLoadingChanged,
+    this.onControllerReady,
+    this.onNavigationStateChanged,
   });
 
   @override
@@ -52,14 +56,21 @@ class _WebViewContainerState extends State<WebViewContainer> {
         preferredContentMode: UserPreferredContentMode.RECOMMENDED,
         allowBackgroundAudioPlaying: true,
       ),
+      onWebViewCreated: (controller) {
+        widget.onControllerReady?.call(controller);
+      },
       onLoadStart: (controller, url) {
         widget.onLoadingChanged(true);
       },
-      onLoadStop: (controller, url) {
+      onLoadStop: (controller, url) async {
         widget.onLoadingChanged(false);
         if (url != null) {
           widget.onUrlChanged(url.toString());
         }
+        // 更新前进/后退状态
+        final canBack = await controller.canGoBack();
+        final canFwd = await controller.canGoForward();
+        widget.onNavigationStateChanged?.call(canBack, canFwd);
       },
       onTitleChanged: (controller, title) {
         if (title != null) {
