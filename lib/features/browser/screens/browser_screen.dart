@@ -316,5 +316,3 @@ class _MenuButton extends StatelessWidget {
     );
   }
 }
-
-}

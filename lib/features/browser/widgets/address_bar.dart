@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../providers/browser_provider.dart';
 
 class AddressBar extends StatefulWidget {
   final String url;

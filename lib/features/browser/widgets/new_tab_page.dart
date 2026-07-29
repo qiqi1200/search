@@ -1,9 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../../core/utils/poem_database.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../core/utils/poem_database.dart';
 import '../../search/search_service.dart';
 
 class NewTabPage extends StatefulWidget {

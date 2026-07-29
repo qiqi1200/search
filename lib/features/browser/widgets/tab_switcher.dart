@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/browser_provider.dart';
+import '../../../providers/browser_provider.dart';
 
 class TabSwitcherSheet extends StatelessWidget {
   const TabSwitcherSheet({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
     final height = MediaQuery.of(context).size.height * 0.55;
 

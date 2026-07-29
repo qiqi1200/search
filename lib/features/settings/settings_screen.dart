@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/settings_provider.dart';
-import '../providers/ai_provider.dart';
-import '../core/constants/search_engines.dart';
+import '../../providers/settings_provider.dart';
+import '../../providers/ai_provider.dart';
+import '../../core/constants/search_engines.dart';
 import '../bookmarks/bookmark_service.dart';
 import '../history/history_service.dart';
 
@@ -41,7 +41,6 @@ class _SearchSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
-    final theme = Theme.of(context);
 
     return _SettingsCard(
       title: '搜索',
@@ -161,7 +160,6 @@ class _AISection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aiProvider = context.watch<AIProvider>();
-    final theme = Theme.of(context);
 
     return _SettingsCard(
       title: 'AI 助手',
