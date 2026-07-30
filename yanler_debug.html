@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yanler 浏览器 · UI 交互调试 v3</title>
+<style>
+:root {
+  --bg: #F8F6F3; --surface: #FAFAF8;
+  --surface2: #F0EDE9; --surface3: #E8E4DF;
+  --text: #1A1A1E; --text2: #6B6B73; --text3: #B0B0B8;
+  --border: rgba(0,0,0,.08);
+  --primary: #5B7FFF; --primary2: #8B5CFF; --accent: #FF5C7B;
+  --shadow: rgba(0,0,0,.06); --radius: 16px;
+}
+.dark {
+  --bg: #1A1A1E; --surface: #1E1E22;
+  --surface2: #222226; --surface3: #2A2A2E;
+  --text: #E8E6E3; --text2: #9E9EA6; --text3: #6B6B73;
+  --border: rgba(255,255,255,.08);
+  --shadow: rgba(0,0,0,.25);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body,html{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--text);
+  display:flex;flex-direction:column;transition:background .3s,color .3s
+}
+header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:8px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0
+}
+header h1{font-size:15px;font-weight:600;background:linear-gradient(135deg,var(--primary),var(--primary2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.header-right{margin-left:auto;display:flex;gap:4px;align-items:center}
+.btn{
+  padding:4px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);font-size:11px;
+  cursor:pointer;transition:all .12s;white-space:nowrap
+}
+.btn:hover{background:var(--surface3)}
+.btn-primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.btn-primary:hover{filter:brightness(1.1)}
+.btn-sm{padding:3px 7px;font-size:10px}
+.badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;background:var(--surface3);color:var(--text2)}
+
+.app-container{display:flex;flex:1;overflow:hidden}
+.phone-panel{flex:1;display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto;position:relative}
+.debug-panel{
+  width:380px;min-width:340px;background:var(--surface);
+  border-left:1px solid var(--border);overflow-y:auto;
+  padding:10px;display:flex;flex-direction:column;gap:8px
+}
+
+.phone-frame{
+  width:380px;min-height:700px;background:var(--bg);
+  border-radius:36px;border:1px solid var(--border);
+  overflow:hidden;position:relative;
+  box-shadow:0 20px 60px var(--shadow);display:flex;flex-direction:column
+}
+.phone-notch{
+  height:36px;background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:10px;
+  color:var(--text3);position:relative;flex-shrink:0
+}
+.phone-notch .time{font-weight:600}
+.phone-notch .right{position:absolute;right:12px;display:flex;gap:4px}
+.phone-notch .left{position:absolute;left:12px;display:flex;gap:4px}
+
+/* 状态横幅 */
+.anim-banner{
+  height:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;gap:4px;background:var(--surface2);color:var(--text2);transition:all .3s
+}
+.anim-banner.active{background:rgba(91,127,255,.08);color:var(--primary)}
+.anim-banner .blink{width:5px;height:5px;border-radius:50%;display:inline-block;animation:blip 1s step-end infinite}
+@keyframes blip{50%{opacity:0}}
+
+/* 新标签页 */
+.newtab-screen{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  background:linear-gradient(180deg,var(--bg) 0%,var(--surface2) 100%);
+  transition:padding-top .35s cubic-bezier(.4,0,.2,1);
+  overflow:hidden;position:relative
+}
+.newtab-screen.search-focused{padding-top:0}
+
+.logo-poem-area{
+  height:80px;display:flex;align-items:center;justify-content:center;
+  position:relative;width:100%;flex-shrink:0;
+  transition:all .35s cubic-bezier(.4,0,.2,1)
+}
+.logo-poem-area.compact{height:0;opacity:0;overflow:hidden}
+
+.yanler-logo{
+  font-family:Georgia,'Times New Roman',serif;
+  background:linear-gradient(135deg,var(--primary),var(--primary2),var(--accent));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;user-select:none
+}
+.yanler-logo .y{font-size:44px;font-weight:200;letter-spacing:-2px}
+.yanler-logo .anler{font-size:32px;font-weight:300;letter-spacing:5px}
+
+.logo-text,.poem-text-wrap{
+  position:absolute;transition:opacity .5s ease
+}
+.logo-text{opacity:1}.logo-text.hidden{opacity:0}
+.poem-text-wrap{opacity:0}.poem-text-wrap.show{opacity:1}
+
+.poem-text{font-size:13px;line-height:1.5;text-align:center;font-style:italic;max-width:280px}
+.poem-author{font-size:10px;color:var(--text2);margin-top:4px;text-align:center}
+.typing-cursor{animation:blink .8s step-end infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* 搜索条 — 核心动画组件 */
+.search-bar-wrap{
+  margin-top:28px;width:300px;max-width:86%;flex-shrink:0;
+  transition:all .35s cubic-bezier(.4,0,.2,1);
+  position:relative;z-index:5
+}
+.search-bar-wrap.raised{
+  margin-top:0;width:100%;max-width:100%;padding:6px 8px 4px;
+  background:var(--surface);border-bottom:1px solid var(--border)
+}
+.search-bar{
+  display:flex;align-items:center;height:44px;
+  background:rgba(255,255,255,.9);border-radius:22px;
+  border:1px solid var(--border);box-shadow:0 4px 20px var(--shadow);
+  padding:0 4px 0 14px;transition:all .3s
+}
+.dark .search-bar{background:rgba(42,42,46,.9)}
+.search-bar-wrap.raised .search-bar{border-radius:20px;box-shadow:0 2px 8px var(--shadow);height:38px}
+.search-bar input{
+  flex:1;border:none;outline:none;background:transparent;
+  font-size:13px;color:var(--text)
+}
+.search-bar input::placeholder{color:var(--text3)}
+.search-bar .go-btn{
+  width:36px;height:36px;background:var(--primary);
+  border-radius:18px;display:flex;align-items:center;
+  justify-content:center;color:#fff;cursor:pointer;transition:all .15s
+}
+.search-bar-wrap.raised .search-bar .go-btn{width:32px;height:32px;border-radius:16px}
+
+.newtab-filler{flex:1;min-height:0;transition:min-height .35s cubic-bezier(.4,0,.2,1)}
+
+/* 底部栏 — 绝对固定，永不上升 */
+.bottom-bar{
+  height:50px;flex-shrink:0;position:relative;z-index:20;
+  background:var(--surface);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 2px
+}
+.bottom-bar .nav-btn{
+  width:36px;height:36px;display:flex;align-items:center;
+  justify-content:center;border-radius:6px;color:var(--text2);
+  font-size:15px;cursor:pointer;transition:all .12s;
+  border:none;background:transparent;flex-shrink:0
+}
+.bottom-bar .nav-btn:hover{background:var(--surface2)}
+.bottom-bar .nav-btn:disabled{opacity:.2;cursor:default}
+.bottom-bar .nav-btn:disabled:hover{background:transparent}
+.bottom-bar .spacer{flex:1}
+
+.ai-center-btn{
+  width:42px;height:42px;border-radius:21px;border:none;
+  background:linear-gradient(135deg,var(--primary),var(--primary2),var(--accent));
+  color:#fff;font-size:18px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;
+  box-shadow:0 3px 12px rgba(91,127,255,.3);transition:all .15s;position:relative
+}
+.ai-center-btn:hover{transform:scale(1.05)}
+.ai-center-btn .ai-dot{
+  width:6px;height:6px;border-radius:50%;position:absolute;top:3px;right:3px;
+  border:2px solid var(--surface);display:none
+}
+.ai-center-btn .ai-dot.on{display:block;background:#34C759}
+
+.tab-btn{
+  width:36px;height:36px;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;border:none;
+  background:transparent;border-radius:6px
+}
+.tab-btn:hover{background:var(--surface2)}
+.tab-badge-frame{
+  width:20px;height:20px;border:1.5px solid var(--text2);
+  border-radius:4px;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:700;color:var(--text2)
+}
+
+/* 导航历史 */
+.nav-bar{
+  display:none;height:18px;padding:0 10px;font-size:9px;color:var(--text3);
+  background:var(--surface2);align-items:center;gap:4px;flex-shrink:0;
+  border-bottom:1px solid var(--border);font-family:monospace
+}
+.nav-bar.show{display:flex}
+
+/* 遮罩 + 面板 */
+.overlay-backdrop{
+  display:none;position:absolute;inset:0;z-index:15;background:rgba(0,0,0,.25)
+}
+.overlay-backdrop.open{display:block}
+
+.menu-overlay{
+  display:none;position:absolute;bottom:56px;left:4px;right:4px;z-index:25
+}
+.menu-overlay.open{display:block}
+.menu-panel{
+  background:var(--surface);border-radius:var(--radius);
+  border:1px solid var(--border);box-shadow:0 -4px 24px var(--shadow);padding:10px 6px
+}
+.menu-handle{width:32px;height:3px;background:var(--text3);border-radius:2px;margin:0 auto 8px}
+.menu-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
+.menu-item{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:6px 2px;border-radius:8px;cursor:pointer;transition:background .12s
+}
+.menu-item:hover{background:var(--surface2)}
+.menu-item .mi-icon{
+  width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:16px;background:var(--surface3);color:var(--primary)
+}
+.menu-item .mi-label{font-size:9px;color:var(--text2)}
+.menu-div{height:1px;background:var(--border);margin:4px 8px}
+.menu-stat{display:flex;align-items:center;justify-content:space-between;padding:4px 10px;font-size:11px}
+.menu-stat .ms-label{color:var(--text2)}
+.menu-stat .ms-value{font-weight:600;color:var(--primary);font-size:11px}
+
+.ai-overlay{
+  display:none;position:absolute;bottom:56px;left:4px;right:4px;
+  background:var(--surface);border-radius:var(--radius);
+  border:1px solid var(--border);box-shadow:0 -4px 24px var(--shadow);
+  padding:12px;z-index:25
+}
+.ai-overlay.open{display:block}
+.ai-overlay .ai-handle{width:32px;height:3px;background:var(--text3);border-radius:2px;margin:0 auto 8px}
+.ai-overlay textarea{
+  width:100%;height:50px;border-radius:6px;border:1px solid var(--border);
+  background:var(--surface2);color:var(--text);padding:6px;font-size:11px;resize:vertical;font-family:inherit
+}
+.ai-overlay textarea:focus{outline:none;border-color:var(--primary)}
+
+/* debug */
+.debug-section{
+  background:var(--surface2);border-radius:10px;
+  padding:10px;border:1px solid var(--border)
+}
+.debug-section h3{
+  font-size:11px;font-weight:600;margin-bottom:6px;
+  display:flex;align-items:center;gap:4px
+}
+.debug-section h3 .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.dot.green{background:#34C759}.dot.yellow{background:#FF9500}.dot.gray{background:#8E8E93}
+
+.debug-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:3px 0;font-size:11px
+}
+.debug-row+.debug-row{border-top:1px solid var(--border)}
+.debug-row .label{color:var(--text2)}
+.debug-row .value{font-weight:500;font-family:monospace;font-size:10px}
+.debug-row .controls{display:flex;gap:2px;flex-wrap:wrap}
+.slider-g{display:flex;align-items:center;gap:4px}
+.slider-g input[type=range]{height:3px;width:60px}
+.slider-g .sv{font-family:monospace;font-size:10px;min-width:30px;text-align:right}
+
+.poem-list{max-height:130px;overflow-y:auto;font-size:10px}
+.poem-item{padding:2px 4px;border-radius:2px;cursor:pointer;display:flex;align-items:center;gap:3px}
+.poem-item:hover{background:var(--surface3)}
+.poem-item .idx{width:16px;color:var(--text3);font-family:monospace;text-align:right;flex-shrink:0}
+.poem-item .pt{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.poem-item .pa{color:var(--text3);font-size:9px;flex-shrink:0}
+.poem-item.current{color:var(--primary);font-weight:600}
+
+#logArea{
+  flex:1;min-height:50px;max-height:100px;overflow-y:auto;
+  font-family:monospace;font-size:9px;background:var(--surface3);
+  border-radius:5px;padding:5px;line-height:1.4
+}
+.icon-test{display:flex;align-items:center;gap:8px}
+.icon-test img{width:36px;height:36px;border-radius:8px;object-fit:cover}
+
+@media(max-width:820px){
+  .app-container{flex-direction:column}
+  .debug-panel{width:100%;min-width:unset;border-left:none;border-top:1px solid var(--border);max-height:40vh}
+  .phone-frame{width:100%;max-width:370px;min-height:550px;border-radius:18px}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1>🦎 Yanler Debug v3</h1>
+  <span style="font-size:10px;color:var(--text2)">交互调试</span>
+  <div class="header-right">
+    <button class="btn btn-sm" onclick="toggleTheme()">🌓 主题</button>
+    <button class="btn btn-sm" onclick="resetAll()">↺ 重置</button>
+    <span id="fpsCounter" class="badge">--</span>
+  </div>
+</header>
+
+<div class="app-container">
+
+  <!-- ===== PHONE ===== -->
+  <div class="phone-panel" id="phonePanel">
+    <div class="phone-frame">
+
+      <!-- Notch -->
+      <div class="phone-notch">
+        <div class="left">📶</div>
+        <span class="time" id="phoneTime">12:00</span>
+        <div class="right">🔋</div>
+      </div>
+
+      <!-- Status Banner -->
+      <div class="anim-banner" id="animBanner">
+        <span id="animLabel">● 就绪</span>
+      </div>
+
+      <!-- Navigation History Bar -->
+      <div class="nav-bar" id="navBar">
+        <span>📜</span>
+        <span id="navLabel">新标签页</span>
+      </div>
+
+      <!-- ===== NEW TAB SCREEN ===== -->
+      <div class="newtab-screen" id="newTabScreen">
+        <!-- Logo + Poem (NO APP ICON) -->
+        <div class="logo-poem-area" id="logoArea">
+          <div class="logo-text" id="logoText">
+            <div class="yanler-logo"><span class="y">Y</span><span class="anler">anler</span></div>
+          </div>
+          <div class="poem-text-wrap" id="poemWrap">
+            <div class="poem-text" id="poemText"></div>
+            <div class="poem-author" id="poemAuthor"></div>
+          </div>
+        </div>
+
+        <!-- Search Bar (animated) -->
+        <div class="search-bar-wrap" id="searchWrap">
+          <div class="search-bar">
+            <span style="font-size:13px;color:var(--text2);margin-right:5px;">🔍</span>
+            <input type="text" placeholder="搜索或输入网址" id="searchInput"
+                   onfocus="onSearchFocus()" onblur="onSearchBlur()"
+                   onkeydown="if(event.key==='Enter')doSearch()">
+            <div class="go-btn" onclick="doSearch()">→</div>
+          </div>
+        </div>
+
+        <div class="newtab-filler" id="tabFiller"></div>
+      </div>
+
+      <!-- ===== BOTTOM BAR (FIXED) ===== -->
+      <div class="bottom-bar" id="bottomBar">
+        <button class="nav-btn" id="backBtn" disabled onclick="navBack()">◀</button>
+        <button class="nav-btn" id="fwdBtn" disabled onclick="navForward()">▶</button>
+        <div class="spacer"></div>
+        <button class="ai-center-btn" id="aiBtn" onclick="toggleAI()">
+          ✦ <span class="ai-dot" id="aiDot"></span>
+        </button>
+        <div class="spacer"></div>
+        <div class="tab-btn" onclick="log('[标签] 打开切换器')">
+          <div class="tab-badge-frame" id="tabCount">1</div>
+        </div>
+        <button class="nav-btn" onclick="toggleMenu()">⋮</button>
+      </div>
+
+      <!-- Backdrop -->
+      <div class="overlay-backdrop" id="backdrop" onclick="closeAll()"></div>
+
+      <!-- MENU (three dots) -->
+      <div class="menu-overlay" id="menuOverlay">
+        <div class="menu-panel">
+          <div class="menu-handle"></div>
+          <div class="menu-grid">
+            <div class="menu-item" onclick="mAct('theme')"><div class="mi-icon" id="mThemeIcon">🌙</div><span class="mi-label" id="mThemeLbl">深色</span></div>
+            <div class="menu-item" onclick="mAct('set')"><div class="mi-icon">⚙️</div><span class="mi-label">设置</span></div>
+            <div class="menu-item" onclick="mAct('incog')"><div class="mi-icon">🛡️</div><span class="mi-label">无痕</span></div>
+            <div class="menu-item" onclick="mAct('ai')"><div class="mi-icon">✨</div><span class="mi-label">AI</span></div>
+            <div class="menu-item" onclick="mAct('bm')"><div class="mi-icon">🔖</div><span class="mi-label">书签</span></div>
+            <div class="menu-item" onclick="mAct('hist')"><div class="mi-icon">🕐</div><span class="mi-label">历史</span></div>
+            <div class="menu-item" onclick="mAct('share')"><div class="mi-icon">📤</div><span class="mi-label">分享</span></div>
+            <div class="menu-item" onclick="mAct('reload')"><div class="mi-icon">🔄</div><span class="mi-label">刷新</span></div>
+          </div>
+          <div class="menu-div"></div>
+          <div class="menu-stat">
+            <span class="ms-label">🛡 广告拦截</span>
+            <span class="ms-value" id="mAdblock">0 个</span>
+          </div>
+          <div class="menu-stat">
+            <span class="ms-label">📄 当前页面</span>
+            <span class="ms-value" id="mPage">新标签页</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI PANEL -->
+      <div class="ai-overlay" id="aiOverlay">
+        <div class="ai-handle"></div>
+        <div style="font-size:11px;font-weight:600;margin-bottom:4px;">
+          ✨ AI 助手 <span id="aiModelDisplay" style="font-weight:400;font-size:9px;color:var(--text2)">(gpt-3.5-turbo)</span>
+        </div>
+        <textarea placeholder="输入你的问题..." id="aiInput"></textarea>
+        <div style="display:flex;gap:4px;margin-top:4px;">
+          <button class="btn btn-sm btn-primary" onclick="doAI()">发送</button>
+          <span style="font-size:9px;color:var(--text2);align-self:center;">
+            · <span id="aiStatusLbl" style="color:var(--text3)">未配置</span>
+          </span>
+        </div>
+      </div>
+
+    </div><!-- /phone-frame -->
+  </div><!-- /phone-panel -->
+
+  <!-- ===== DEBUG ===== -->
+  <div class="debug-panel">
+
+    <!-- Typewriter -->
+    <div class="debug-section">
+      <h3>⌨️ 打字机 <span class="dot green" id="typeDot"></span></h3>
+      <div class="debug-row"><span class="label">状态</span><span class="value" id="typeSt">启动中</span></div>
+      <div class="debug-row"><span class="label">诗词</span><span class="value" id="poemIdx">-</span></div>
+      <div class="debug-row"><span class="label">字符</span><span class="value" id="typeProg">0/0</span></div>
+      <div class="debug-row"><span class="label">阶段</span><span class="value" id="phaseLbl">Logo</span></div>
+      <div class="debug-row slider-g">
+        <span class="label">速度</span>
+        <input type="range" id="typeSpeed" min="20" max="200" value="60">
+        <span class="sv" id="speedVal">60</span>
+      </div>
+      <div class="debug-row">
+        <div class="controls" style="width:100%;justify-content:space-between">
+          <button class="btn btn-sm" onclick="toggleTW()" id="twBtn">⏸ 暂停</button>
+          <button class="btn btn-sm" onclick="skipPoem()">⏭ 跳过</button>
+          <button class="btn btn-sm" onclick="forceSW()">🔄 切换</button>
+          <button class="btn btn-sm" onclick="restartTW()">🔁 重启</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Poems -->
+    <div class="debug-section">
+      <h3>📜 诗词 <span class="badge" id="poemCnt">0</span></h3>
+      <div class="poem-list" id="poemList"></div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="debug-section">
+      <h3>📱 底部栏 <span style="color:var(--primary);font-size:9px;">⚡ AI C位</span></h3>
+      <div class="debug-row">
+        <span class="label">🗂 标签数</span>
+        <div class="slider-g">
+          <input type="range" id="tabSlider" min="1" max="20" value="3">
+          <span class="sv" id="tabVal">3</span>
+        </div>
+      </div>
+      <div class="debug-row">
+        <span class="label">🛡 拦截数</span>
+        <div class="slider-g">
+          <input type="range" id="adSlider" min="0" max="999" value="12">
+          <span class="sv" id="adVal">12</span>
+        </div>
+      </div>
+      <div class="debug-row">
+        <span class="label">AI 状态</span>
+        <div class="controls">
+          <button class="btn btn-sm" onclick="setAI('on')">已配置</button>
+          <button class="btn btn-sm" onclick="setAI('off')">未配置</button>
+          <button class="btn btn-sm" onclick="setAI('busy')">处理中</button>
+        </div>
+      </div>
+      <div class="debug-row">
+        <span class="label">🔙 导航</span>
+        <div class="controls">
+          <button class="btn btn-sm" onclick="simPage()">📄 打开页面</button>
+          <button class="btn btn-sm" onclick="toggleNav()">🔀 切换可用</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search Test -->
+    <div class="debug-section">
+      <h3>🔍 搜索测试</h3>
+      <div class="debug-row">
+        <span class="label">点击测试</span>
+        <button class="btn btn-sm" onclick="focusSearch()">聚焦搜索条</button>
+        <button class="btn btn-sm" onclick="blurSearch()">取消聚焦</button>
+      </div>
+      <div class="debug-row" style="font-size:9px;color:var(--text3);justify-content:center;">
+        聚焦→搜索条上升，Logo压缩，底部栏固定不动
+      </div>
+    </div>
+
+    <!-- Icon Check -->
+    <div class="debug-section">
+      <h3>🖼️ 图标</h3>
+      <div class="icon-test">
+        <img src="yanler_browser/assets/fonts/yanler_icon.png"
+             onerror="this.style.display='none';this.nextElementSibling.textContent='❌ 加载失败'"
+             onload="this.nextElementSibling.textContent='✅ '+this.naturalWidth+'×'+this.naturalHeight">
+        <span style="font-size:10px;">检测中...</span>
+      </div>
+      <div style="font-size:9px;color:var(--text3);margin-top:2px;">
+        ⚠ 图标仅作为 APP 图标，主页不显示，只有 Yanler 文字
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="debug-section" style="flex:1;display:flex;flex-direction:column;">
+      <h3>📋 日志</h3>
+      <div id="logArea"><div>— v3 日志 —</div></div>
+      <div style="margin-top:3px;display:flex;gap:3px;">
+        <button class="btn btn-sm" onclick="document.getElementById('logArea').innerHTML='<div>— 已清除 —</div>'">清空</button>
+        <button class="btn btn-sm" onclick="exportLog()">导出</button>
+      </div>
+    </div>
+
+  </div><!-- /debug-panel -->
+</div><!-- /app-container -->
+
+<script>
+// ============================================================
+// 诗词
+// ============================================================
+const POEMS = [
+  {text:'人生若只如初见，何事秋风悲画扇',author:'纳兰性德',title:'木兰花·拟古决绝词柬友'},
+  {text:'众里寻他千百度，蓦然回首，那人却在，灯火阑珊处',author:'辛弃疾',title:'青玉案·元夕'},
+  {text:'但愿人长久，千里共婵娟',author:'苏轼',title:'水调歌头'},
+  {text:'行到水穷处，坐看云起时',author:'王维',title:'终南别业'},
+  {text:'竹杖芒鞋轻胜马，谁怕？一蓑烟雨任平生',author:'苏轼',title:'定风波'},
+  {text:'此情可待成追忆，只是当时已惘然',author:'李商隐',title:'锦瑟'},
+  {text:'落霞与孤鹜齐飞，秋水共长天一色',author:'王勃',title:'滕王阁序'},
+  {text:'醉后不知天在水，满船清梦压星河',author:'唐珙',title:'题龙阳县青草湖'},
+  {text:'天生我材必有用，千金散尽还复来',author:'李白',title:'将进酒'},
+  {text:'小舟从此逝，江海寄余生',author:'苏轼',title:'临江仙·夜饮东坡醒复醉'},
+  {text:'长风破浪会有时，直挂云帆济沧海',author:'李白',title:'行路难·其一'},
+  {text:'桃李春风一杯酒，江湖夜雨十年灯',author:'黄庭坚',title:'寄黄几复'},
+  {text:'莫愁前路无知己，天下谁人不识君',author:'高适',title:'别董大'},
+  {text:'人间四月芳菲尽，山寺桃花始盛开',author:'白居易',title:'大林寺桃花'},
+  {text:'此情可待成追忆，只是当时已惘然',author:'李商隐',title:'锦瑟'},
+];
+
+// ============================================================
+// 状态
+// ============================================================
+const S = {
+  pIdx: Math.floor(Math.random()*POEMS.length), cIdx: 0,
+  showing: false, paused: false, typing: false,
+  speed: 60, logoDur: 2500, poemDur: 6500,
+  cTimer: null, tTimer: null, pTimer: null,
+  navOn: true,
+  // 导航栈 — 真正支持前进后退
+  stack: ['新标签页'],
+  pos: 0,
+  // 页面快照（用于后退恢复）
+  snapshots: {'新标签页': null},
+};
+
+// ============================================================
+// 初始化
+// ============================================================
+function init() {
+  clock(); setInterval(clock, 10000);
+  renderPoems(); upUI();
+  setBanner('● 就绪');
+
+  // 1.5s 后首次切诗词
+  setTimeout(() => { if (!S.paused) toPoem(); }, 1500);
+
+  // sliders
+  ['tabSlider','adSlider','typeSpeed'].forEach(id => {
+    document.getElementById(id).addEventListener('input', onSlide);
+  });
+
+  // 点击手机框外关闭面板
+  document.getElementById('phonePanel').addEventListener('click', e => {
+    if (!e.target.closest('.phone-frame')) closeAll();
+  });
+
+  document.getElementById('poemCnt').textContent = POEMS.length;
+  log('v3 调试已就绪，' + POEMS.length + ' 诗词');
+}
+
+function onSlide(e) {
+  const v = parseInt(e.target.value);
+  switch(e.target.id) {
+    case 'tabSlider':
+      document.getElementById('tabVal').textContent = v;
+      document.getElementById('tabCount').textContent = v;
+      break;
+    case 'adSlider':
+      document.getElementById('adVal').textContent = v;
+      document.getElementById('mAdblock').textContent = v + ' 个';
+      break;
+    case 'typeSpeed':
+      S.speed = v;
+      document.getElementById('speedVal').textContent = v;
+      break;
+  }
+}
+
+function clock() {
+  const n = new Date();
+  document.getElementById('phoneTime').textContent =
+    String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+}
+
+function setBanner(t, active) {
+  const el = document.getElementById('animBanner');
+  document.getElementById('animLabel').textContent = t;
+  el.classList.toggle('active', !!active);
+}
+
+// ============================================================
+// 打字机
+// ============================================================
+function toPoem() {
+  if (S.paused) return;
+  clrTimers();
+  let n;
+  do n = Math.floor(Math.random()*POEMS.length); while (n===S.pIdx && POEMS.length>1);
+  S.pIdx = n; S.cIdx = 0; S.showing = true; S.typing = true;
+
+  document.getElementById('logoText').classList.add('hidden');
+  document.getElementById('poemWrap').classList.add('show');
+  updDisp(); upUI();
+  setBanner('⟳ 打字中...', true);
+  log('→ ' + POEMS[S.pIdx].text.slice(0,8) + '...');
+
+  setTimeout(() => { if (!S.paused && S.showing) startT(); }, 250);
+  S.pTimer = setTimeout(() => { if (!S.paused) toLogo(); }, S.poemDur);
+}
+
+function toLogo() {
+  if (S.paused) return;
+  clrTimers();
+  S.showing = false; S.typing = false;
+  document.getElementById('logoText').classList.remove('hidden');
+  document.getElementById('poemWrap').classList.remove('show');
+  updDisp(); upUI();
+  setBanner('● Logo');
+  S.cTimer = setTimeout(() => { if (!S.paused) toPoem(); }, S.logoDur);
+}
+
+function startT() {
+  if (S.tTimer) clearInterval(S.tTimer);
+  const p = POEMS[S.pIdx];
+  S.tTimer = setInterval(() => {
+    if (S.paused) return;
+    if (!S.showing) { clearInterval(S.tTimer); return; }
+    if (S.cIdx < p.text.length) {
+      S.cIdx++; updDisp(); upUI();
+      setBanner('⟳ ' + p.text.slice(0,Math.max(2,S.cIdx)) + '▊', true);
+    } else {
+      clearInterval(S.tTimer); S.typing = false;
+      setBanner('✓ ' + p.author, true);
+      upUI(); log('✓ "' + p.text + '"');
+    }
+  }, S.speed);
+}
+
+function clrTimers() {
+  if (S.cTimer) { clearTimeout(S.cTimer); S.cTimer = null; }
+  if (S.tTimer) { clearInterval(S.tTimer); S.tTimer = null; }
+  if (S.pTimer) { clearTimeout(S.pTimer); S.pTimer = null; }
+}
+
+function updDisp() {
+  const el = document.getElementById('poemText');
+  const ae = document.getElementById('poemAuthor');
+  if (S.showing && POEMS[S.pIdx]) {
+    const p = POEMS[S.pIdx];
+    const d = p.text.slice(0, S.cIdx);
+    const c = (S.typing && S.cIdx < p.text.length) ? '<span class="typing-cursor">▊</span>' : '';
+    el.innerHTML = d + c;
+    ae.style.display = (S.cIdx >= p.text.length) ? 'block' : 'none';
+    if (S.cIdx >= p.text.length) ae.textContent = '—— ' + p.author + ' 《' + p.title + '》';
+  }
+}
+
+function upUI() {
+  const p = POEMS[S.pIdx];
+  document.getElementById('poemIdx').textContent = p ? p.author+' · '+p.title : '-';
+  document.getElementById('typeProg').textContent = S.cIdx + '/' + (p ? p.text.length : 0);
+  document.getElementById('phaseLbl').textContent = S.showing ? (S.typing ? '▶打字' : '✓完成') : '●Logo';
+
+  let st = S.paused ? '⏸暂停' : (S.showing ? (S.typing ? '▶打字中' : '⏹显示完') : '⏳等待');
+  document.getElementById('typeSt').textContent = st;
+
+  const dot = document.getElementById('typeDot');
+  if (S.paused) dot.className = 'dot yellow';
+  else if (S.showing && S.typing) dot.className = 'dot green';
+  else dot.className = 'dot gray';
+
+  document.querySelectorAll('.poem-item').forEach((el,i)=>{
+    el.classList.toggle('current', i===S.pIdx && S.showing);
+  });
+}
+
+function renderPoems() {
+  document.getElementById('poemList').innerHTML = POEMS.map((p,i)=>
+    `<div class="poem-item" onclick="selectP(${i})">
+      <span class="idx">${i}</span>
+      <span class="pt">${p.text}</span>
+      <span class="pa">${p.author}</span>
+    </div>`
+  ).join('');
+}
+
+// 控制
+function toggleTW() {
+  S.paused = !S.paused;
+  document.getElementById('twBtn').textContent = S.paused ? '▶ 继续' : '⏸ 暂停';
+  if (!S.paused) {
+    setBanner('⟳ 已恢复', S.showing);
+    if (S.showing && S.typing) startT();
+  } else setBanner('⏸ 暂停', false);
+  upUI(); log(S.paused ? '⏸ 暂停' : '▶ 恢复');
+}
+function skipPoem() {
+  if (!S.showing) return;
+  const p = POEMS[S.pIdx]; S.cIdx = p.text.length; S.typing = false;
+  if (S.tTimer) clearInterval(S.tTimer);
+  updDisp(); upUI(); setBanner('✓ 跳过', true); log('⏭ 跳过打字');
+}
+function forceSW() {
+  clrTimers();
+  S.showing ? toLogo() : toPoem();
+  log('🔄 强制切换');
+}
+function restartTW() {
+  clrTimers(); S.paused = false;
+  document.getElementById('twBtn').textContent = '⏸ 暂停';
+  S.showing = false; S.typing = false;
+  document.getElementById('logoText').classList.remove('hidden');
+  document.getElementById('poemWrap').classList.remove('show');
+  updDisp(); upUI(); setBanner('● 已重启');
+  setTimeout(() => { if (!S.paused) toPoem(); }, 1500);
+  log('🔁 重启打字机');
+}
+function selectP(i) {
+  if (!S.showing) { S.pIdx = i; toPoem(); }
+  else { S.pIdx = i; skipPoem(); }
+  const items = document.querySelectorAll('.poem-item');
+  if (items[i]) items[i].scrollIntoView({block:'nearest'});
+}
+
+// ============================================================
+// 搜索条动画 — 上升/下降
+// ============================================================
+let searchFocused = false;
+
+function onSearchFocus() {
+  if (searchFocused) return;
+  searchFocused = true;
+  document.getElementById('newTabScreen').classList.add('search-focused');
+  document.getElementById('logoArea').classList.add('compact');
+  document.getElementById('searchWrap').classList.add('raised');
+  document.getElementById('tabFiller').style.minHeight = '0';
+  log('🔍 搜索条聚焦 → 上升动画');
+}
+
+function onSearchBlur() {
+  // 延迟执行，让点击 go 按钮先触发
+  setTimeout(() => {
+    if (!searchFocused) return;
+    searchFocused = false;
+    document.getElementById('newTabScreen').classList.remove('search-focused');
+    document.getElementById('logoArea').classList.remove('compact');
+    document.getElementById('searchWrap').classList.remove('raised');
+    document.getElementById('tabFiller').style.minHeight = '';
+  }, 150);
+}
+
+function focusSearch() {
+  document.getElementById('searchInput').focus();
+}
+
+function blurSearch() {
+  document.getElementById('searchInput').blur();
+  onSearchBlur();
+}
+
+function doSearch() {
+  const v = document.getElementById('searchInput').value.trim();
+  if (!v) return;
+  log('🔍 搜索: ' + v);
+  document.getElementById('searchInput').blur();
+  // Restore search bar position
+  onSearchBlur();
+  // Open a page
+  simPageWithQuery(v);
+}
+
+function simPageWithQuery(q) {
+  // Save page and navigate
+  clearNewTabContent();
+  S.stack = S.stack.slice(0, S.pos+1);
+  S.stack.push(q);
+  S.pos = S.stack.length - 1;
+  saveSnapshot(q);
+  showPageContent(q);
+  upNav();
+  log('📄 打开: ' + q);
+}
+
+// ============================================================
+// 导航（前进/后退真正可用）
+// ============================================================
+function navBack() {
+  if (!S.navOn || S.pos <= 0) return;
+  // Save current page snapshot
+  saveSnapshot(S.stack[S.pos]);
+  S.pos--;
+  restoreSnapshot(S.stack[S.pos]);
+  upNav();
+  log('◀ 后退到: ' + S.stack[S.pos]);
+}
+
+function navForward() {
+  if (!S.navOn || S.pos >= S.stack.length - 1) return;
+  S.pos++;
+  restoreSnapshot(S.stack[S.pos]);
+  upNav();
+  log('▶ 前进到: ' + S.stack[S.pos]);
+}
+
+function simPage() {
+  const pages = ['example.com','github.com','zhihu.com','bilibili.com',
+                 'stackoverflow.com','wikipedia.org','reddit.com','vercel.app',
+                 'dribbble.com','producthunt.com'];
+  const url = pages[Math.floor(Math.random() * pages.length)];
+  clearNewTabContent();
+  S.stack = S.stack.slice(0, S.pos+1);
+  S.stack.push(url);
+  S.pos = S.stack.length - 1;
+  saveSnapshot(url);
+  showPageContent(url);
+  upNav();
+  document.getElementById('navBar').classList.add('show');
+  log('📄 打开: ' + url);
+}
+
+function clearNewTabContent() {
+  // Stop typewriter timers
+  clrTimers();
+  // Save current new tab state
+  const nt = document.getElementById('newTabScreen');
+  S.snapshots['新标签页'] = nt.innerHTML;
+}
+
+function showPageContent(label) {
+  const nt = document.getElementById('newTabScreen');
+  nt.classList.remove('search-focused');
+  document.getElementById('logoArea').classList.remove('compact');
+  document.getElementById('searchWrap').classList.remove('raised');
+  nt.innerHTML = `
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;padding:16px;">
+      <div style="font-size:28px;">🌐</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text);">${label}</div>
+      <div style="font-size:10px;color:var(--text2);margin-top:4px;">
+        ◀ ▶ 按钮可以前后导航
+      </div>
+      <button class="btn btn-sm" onclick="goHome()" style="margin-top:6px;">🏠 主页</button>
+    </div>
+  `;
+}
+
+function goHome() {
+  clearNewTabContent();
+  S.stack = S.stack.slice(0, S.pos+1);
+  S.stack.push('新标签页');
+  S.pos = S.stack.length - 1;
+  restoreSnapshot('新标签页');
+  upNav();
+  log('🏠 回到主页');
+}
+
+function saveSnapshot(key) {
+  const nt = document.getElementById('newTabScreen');
+  S.snapshots[key] = nt.innerHTML;
+}
+
+function restoreSnapshot(key) {
+  const nt = document.getElementById('newTabScreen');
+  if (S.snapshots[key]) {
+    nt.innerHTML = S.snapshots[key];
+  } else {
+    // Restore new tab page
+    nt.innerHTML = `
+      <div class="logo-poem-area" id="logoArea">
+        <div class="logo-text" id="logoText">
+          <div class="yanler-logo"><span class="y">Y</span><span class="anler">anler</span></div>
+        </div>
+        <div class="poem-text-wrap" id="poemWrap">
+          <div class="poem-text" id="poemText"></div>
+          <div class="poem-author" id="poemAuthor"></div>
+        </div>
+      </div>
+      <div class="search-bar-wrap" id="searchWrap">
+        <div class="search-bar">
+          <span style="font-size:13px;color:var(--text2);margin-right:5px;">🔍</span>
+          <input type="text" placeholder="搜索或输入网址" id="searchInput"
+                 onfocus="onSearchFocus()" onblur="onSearchBlur()"
+                 onkeydown="if(event.key==='Enter')doSearch()">
+          <div class="go-btn" onclick="doSearch()">→</div>
+        </div>
+      </div>
+      <div class="newtab-filler" id="tabFiller"></div>
+    `;
+  }
+}
+
+function upNav() {
+  document.getElementById('backBtn').disabled = !S.navOn || S.pos <= 0;
+  document.getElementById('fwdBtn').disabled = !S.navOn || S.pos >= S.stack.length - 1;
+  document.getElementById('navLabel').textContent = S.stack[S.pos] || '新标签页';
+  document.getElementById('mPage').textContent = S.stack[S.pos] || '空闲';
+}
+
+function toggleNav() {
+  S.navOn = !S.navOn;
+  upNav();
+  log('[导航] ' + (S.navOn ? '启用' : '禁用'));
+}
+
+// ============================================================
+// 面板控制
+// ============================================================
+function toggleAI() {
+  closeMenu();
+  const p = document.getElementById('aiOverlay');
+  const b = document.getElementById('backdrop');
+  const o = !p.classList.contains('open');
+  p.classList.toggle('open', o);
+  b.classList.toggle('open', o);
+  log('[AI] ' + (o ? '打开' : '关闭'));
+}
+
+function toggleMenu() {
+  closeAI();
+  const m = document.getElementById('menuOverlay');
+  const b = document.getElementById('backdrop');
+  const o = !m.classList.contains('open');
+  m.classList.toggle('open', o);
+  b.classList.toggle('open', o);
+  if (o) {
+    document.getElementById('mAdblock').textContent = document.getElementById('adSlider').value + ' 个';
+    document.getElementById('mPage').textContent = S.stack[S.pos];
+  }
+  log('[菜单] ' + (o ? '打开' : '关闭'));
+}
+
+function closeAll() {
+  closeAI(); closeMenu();
+  document.getElementById('backdrop').classList.remove('open');
+}
+function closeAI() { document.getElementById('aiOverlay').classList.remove('open'); }
+function closeMenu() { document.getElementById('menuOverlay').classList.remove('open'); }
+
+function mAct(a) {
+  closeAll();
+  switch(a) {
+    case 'theme': toggleTheme(); break;
+    case 'set': log('[菜单] 设置'); break;
+    case 'incog': log('[菜单] 无痕切换'); break;
+    case 'ai': toggleAI(); break;
+    case 'bm': log('[菜单] 书签'); break;
+    case 'hist': log('[菜单] 历史'); break;
+    case 'share': log('[菜单] 分享'); break;
+    case 'reload': log('[菜单] 刷新'); simPage(); break;
+  }
+}
+
+// ============================================================
+// 主题 & AI 状态
+// ============================================================
+let darkMode = false;
+function toggleTheme() {
+  darkMode = !darkMode;
+  document.documentElement.classList.toggle('dark', darkMode);
+  document.getElementById('mThemeIcon').textContent = darkMode ? '☀️' : '🌙';
+  document.getElementById('mThemeLbl').textContent = darkMode ? '浅色' : '深色';
+  log('[主题] ' + (darkMode ? '深色' : '浅色'));
+}
+
+function setAI(st) {
+  const dot = document.getElementById('aiDot');
+  const lbl = document.getElementById('aiStatusLbl');
+  if (st === 'on') {
+    dot.classList.add('on'); lbl.textContent = '已配置'; lbl.style.color = '#34C759';
+    log('[AI] 已配置');
+  } else if (st === 'off') {
+    dot.classList.remove('on'); lbl.textContent = '未配置'; lbl.style.color = 'var(--text3)';
+    log('[AI] 未配置');
+  } else if (st === 'busy') {
+    dot.classList.add('on'); dot.style.background = '#FF9500';
+    lbl.textContent = '处理中...'; lbl.style.color = '#FF9500';
+    log('[AI] 处理中...');
+    setTimeout(() => { dot.style.background = '#34C759'; lbl.textContent = '已配置'; lbl.style.color = '#34C759'; }, 2000);
+  }
+}
+
+function doAI() {
+  const v = document.getElementById('aiInput').value.trim();
+  if (!v) return;
+  const cfg = document.getElementById('aiStatusLbl').textContent === '已配置';
+  if (!cfg) { log('[AI] ⚠ 未配置 API Key'); return; }
+  log('[AI] ✨ ' + v.slice(0,30));
+  document.getElementById('aiInput').value = '';
+  setAI('busy');
+}
+
+// ============================================================
+// 日志
+// ============================================================
+function log(msg) {
+  const a = document.getElementById('logArea');
+  const n = new Date();
+  const ts = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0') + ':' + String(n.getSeconds()).padStart(2,'0');
+  a.innerHTML += '<div>[' + ts + '] ' + msg + '</div>';
+  a.scrollTop = a.scrollHeight;
+}
+function exportLog() {
+  const lines = [];
+  document.querySelectorAll('#logArea > div').forEach(d => lines.push(d.textContent));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], {type:'text/plain'}));
+  a.download = 'yanler-log-' + Date.now() + '.txt';
+  a.click();
+}
+
+function resetAll() {
+  restartTW();
+  setAI('off');
+  document.getElementById('tabSlider').value = 3;
+  document.getElementById('tabVal').textContent = '3';
+  document.getElementById('tabCount').textContent = '3';
+  document.getElementById('adSlider').value = 12;
+  document.getElementById('adVal').textContent = '12';
+  document.getElementById('mAdblock').textContent = '12 个';
+  document.getElementById('typeSpeed').value = 60; S.speed = 60;
+  document.getElementById('speedVal').textContent = '60';
+  S.navOn = true; S.stack = ['新标签页']; S.pos = 0;
+  upNav();
+  document.getElementById('navBar').classList.remove('show');
+  closeAll();
+  searchFocused = false;
+  // Restore new tab
+  restoreSnapshot('新标签页');
+  if (darkMode) toggleTheme();
+  log('🔁 全部重置');
+}
+
+// ============================================================
+// FPS
+// ============================================================
+let fc=0, lft=performance.now();
+(function fps(){
+  fc++;
+  const n=performance.now();
+  if (n-lft>=1000) {
+    document.getElementById('fpsCounter').textContent = fc+'fps';
+    fc=0; lft=n;
+  }
+  requestAnimationFrame(fps);
+})();
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

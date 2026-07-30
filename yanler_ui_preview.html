@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yanler 浏览器 UI 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: #F8F6F3; color: #1A1A1E;
+    padding: 40px 20px;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 40px;
+  }
+  .section-title { font-size: 14px; color: #6B6B73; letter-spacing: 3px; margin-bottom: 16px; text-transform: uppercase; }
+  .phone-frame {
+    width: 375px; height: 750px;
+    background: #F8F6F3;
+    border-radius: 40px;
+    border: 1px solid #D0CCC6;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,.08);
+  }
+
+  /* ===== 新标签页 ===== */
+  .newtab-screen {
+    height: 100%;
+    background: linear-gradient(180deg, #F8F6F3 0%, #F0EDE9 100%);
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 120px;
+  }
+  .yanler-logo {
+    font-family: Georgia, 'Times New Roman', serif;
+    background: linear-gradient(135deg, #5B7FFF, #8B5CFF, #FF5C7B);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .yanler-logo .y { font-size: 64px; font-weight: 200; letter-spacing: -2px; }
+  .yanler-logo .anler { font-size: 48px; font-weight: 300; letter-spacing: 6px; }
+  .slogan { font-size: 14px; color: #6B6B73; letter-spacing: 4px; margin-top: 8px; }
+
+  .search-bar {
+    margin-top: 48px;
+    width: 320px; height: 52px;
+    background: rgba(255,255,255,.85);
+    border-radius: 26px;
+    border: 1px solid rgba(0,0,0,.08);
+    box-shadow: 0 4px 20px rgba(0,0,0,.06);
+    display: flex; align-items: center;
+    padding: 0 6px 0 20px;
+  }
+  .search-bar input {
+    flex: 1; border: none; outline: none;
+    background: transparent;
+    font-size: 15px; color: #1A1A1E;
+  }
+  .search-bar input::placeholder { color: #B0B0B8; }
+  .search-bar .go-btn {
+    width: 40px; height: 40px;
+    background: #5B7FFF; border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; cursor: pointer;
+  }
+
+  .poem-box {
+    margin-top: 48px;
+    max-width: 320px;
+    padding: 16px 24px;
+    border: 1px solid rgba(0,0,0,.06);
+    border-radius: 12px;
+    text-align: center;
+  }
+  .poem-text { font-size: 16px; line-height: 1.8; color: #1A1A1E; font-style: italic; }
+  .typing-cursor { animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .poem-author { font-size: 12px; color: #6B6B73; margin-top: 8px; }
+
+  .bottom-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: #F8F6F3;
+    border-top: 1px solid rgba(0,0,0,.06);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 8px;
+  }
+  .bottom-bar .icon { font-size: 20px; color: #6B6B73; cursor: pointer; }
+  .tab-badge {
+    background: rgba(91,127,255,.1);
+    padding: 4px 14px; border-radius: 20px;
+    display: flex; align-items: center; gap: 4px;
+    font-size: 13px; color: #5B7FFF; font-weight: 600; cursor: pointer;
+  }
+  .menu-btn {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, #5B7FFF, #7B5FFF);
+    border-radius: 22px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(91,127,255,.3);
+  }
+
+  /* ===== 浏览界面 ===== */
+  .browse-screen {
+    height: 100%;
+    display: flex; flex-direction: column;
+  }
+  .address-bar {
+    padding: 8px 12px 4px;
+  }
+  .address-bar .bar {
+    height: 42px;
+    background: rgba(255,255,255,.85);
+    border-radius: 21px;
+    border: 1px solid rgba(0,0,0,.06);
+    display: flex; align-items: center;
+    padding: 0 4px 0 12px;
+  }
+  .lock-icon { font-size: 12px; color: #34C759; margin-right: 8px; }
+  .address-bar input {
+    flex: 1; border: none; outline: none;
+    background: transparent; font-size: 13px; color: #1A1A1E;
+  }
+  .content-area {
+    flex: 1; margin: 8px 12px;
+    background: #E8E4DF; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6B6B73; font-size: 14px;
+  }
+
+  /* ===== 标签切换器 ===== */
+  .tab-switcher {
+    width: 375px; height: 500px;
+    background: #F8F6F3;
+    border-radius: 24px 24px 0 0;
+    padding: 16px;
+    box-shadow: 0 -4px 30px rgba(0,0,0,.08);
+  }
+  .tab-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .tab-header h3 { font-size: 16px; font-weight: 600; }
+  .tab-header .actions { display: flex; gap: 8px; font-size: 13px; }
+  .tab-header .actions span { cursor: pointer; color: #5B7FFF; }
+  .tab-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tab-card {
+    background: #F0EDE9; border-radius: 16px;
+    border: .5px solid #D0CCC6;
+    height: 180px; display: flex; flex-direction: column;
+    cursor: pointer;
+  }
+  .tab-card.active { border-color: #5B7FFF; border-width: 1.5px; background: rgba(91,127,255,.05); }
+  .tab-preview {
+    flex: 1; margin: 8px; background: #E8E4DF; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: #6B6B73; font-size: 24px;
+  }
+  .tab-info { padding: 4px 10px 8px; display: flex; align-items: center; }
+  .tab-info span { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-info .close { font-size: 14px; color: #6B6B73; cursor: pointer; padding: 0 4px; }
+
+  /* ===== 底部菜单 ===== */
+  .bottom-sheet {
+    width: 375px;
+    background: #F8F6F3;
+    border-radius: 24px 24px 0 0;
+    padding: 24px 8px;
+  }
+  .sheet-handle { width: 40px; height: 4px; background: #D0CCC6; border-radius: 2px; margin: 0 auto 24px; }
+  .menu-grid { display: flex; justify-content: space-around; }
+  .menu-item { display: flex; flex-direction: column; align-items: center; gap: 6px; cursor: pointer; }
+  .menu-item .icon-bg {
+    width: 52px; height: 52px;
+    background: #E8E4DF; border-radius: 16px;
+    border: .5px solid rgba(0,0,0,.06);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; color: #5B7FFF;
+  }
+  .menu-item .label { font-size: 11px; color: #6B6B73; }
+
+  /* ===== 设置页 ===== */
+  .settings-screen {
+    width: 375px; background: #F8F6F3;
+    padding: 16px;
+  }
+  .settings-card {
+    background: #F0EDE9; border-radius: 16px;
+    border: .5px solid #D0CCC6;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .settings-card h4 { font-size: 14px; color: #5B7FFF; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .sett-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+  .sett-row + .sett-row { border-top: .5px solid rgba(0,0,0,.06); }
+  .sett-row .label { font-size: 14px; }
+  .sett-row .value { font-size: 13px; color: #6B6B73; }
+  .switch { width: 44px; height: 24px; background: #5B7FFF; border-radius: 12px; position: relative; cursor: pointer; }
+  .switch.off { background: #D0CCC6; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 22px; width: 20px; height: 20px; background: white; border-radius: 50%; }
+  .switch.off::after { left: 2px; }
+
+  .mock-group { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+</style>
+</head>
+<body>
+
+<h2 style="font-weight:400;color:#5B7FFF;">Yanler 浏览器 · UI 设计预览</h2>
+<p style="color:#6B6B73;font-size:13px;margin-top:-12px">以下为关键界面模拟</p>
+
+<!-- ===== 新标签页（精简版） ===== -->
+<div class="mock-group">
+<div class="section-title">📄 新标签页（Yanler ↔ 诗词 交替）</div>
+<div class="phone-frame">
+<div class="newtab-screen" style="padding-top:140px;">
+<div class="yanler-logo">
+  <img src="yanler_browser/assets/fonts/yanler_icon.png" style="width:64px;height:64px;border-radius:16px;margin-bottom:16px;" onerror="this.style.display='none'" alt="Yanler">
+  <div id="logoArea">
+    <span class="y">Y</span><span class="anler">anler</span>
+  </div>
+  <div id="poemArea" style="display:none;">
+    <div class="poem-text" id="poemText" style="font-size:15px;line-height:1.5;"></div>
+    <div class="poem-author" id="poemAuthor" style="font-size:11px;margin-top:6px;"></div>
+  </div>
+</div>
+
+<div class="search-bar" style="margin-top:40px;width:300px;height:48px;border-radius:24px;">
+  <span style="color:#6B6B73;margin-right:6px;font-size:14px;">🔍</span>
+  <input placeholder="搜索或输入网址" style="font-size:14px;">
+  <div class="go-btn" style="width:38px;height:38px;border-radius:19px;">→</div>
+</div>
+    <div class="poem-box">
+      <div class="poem-text">
+        人生若只如初见，何事秋风悲画扇<span class="typing-cursor">▊</span>
+      </div>
+      <div class="poem-author">—— 纳兰性德《木兰花·拟古决绝词柬友》</div>
+    </div>
+    <div class="bottom-bar" style="padding:6px 24px;justify-content:space-between;">
+      <span class="icon" style="font-size:18px;">◀</span>
+      <div class="tab-badge" style="padding:0;"><span>▢</span> 1</div>
+      <div class="menu-btn" style="width:40px;height:40px;border-radius:20px;">≡</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 浏览界面 ===== -->
+<div class="mock-group">
+<div class="section-title">🌐 网页浏览界面</div>
+<div class="phone-frame">
+  <div class="browse-screen">
+    <div class="address-bar">
+      <div class="bar">
+        <span class="lock-icon">🔒</span>
+        <input value="https://example.com" readonly>
+        <span style="font-size:18px;color:#6B6B73;padding:0 8px;cursor:pointer;">↻</span>
+      </div>
+    </div>
+    <div class="content-area">
+      <span style="text-align:center;padding:20px;">网页内容<br>（WebView 区域）</span>
+    </div>
+    <div class="bottom-bar" style="padding:6px 24px;justify-content:space-between;">
+      <span class="icon" style="font-size:18px;">◀</span>
+      <div class="tab-badge" style="padding:0;"><span>▢</span> 2</div>
+      <div class="menu-btn" style="width:40px;height:40px;border-radius:20px;">≡</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 标签切换器 ===== -->
+<div class="mock-group">
+<div class="section-title">📑 标签切换器</div>
+<div class="tab-switcher" style="box-shadow:0 4px 30px rgba(0,0,0,.08);border-radius:24px;">
+  <div class="tab-header">
+    <h3>标签页 (2)</h3>
+    <div class="actions">
+      <span>＋ 新建</span>
+      <span>全部关闭</span>
+    </div>
+  </div>
+  <div class="tab-grid">
+    <div class="tab-card active">
+      <div class="tab-preview">🌐</div>
+      <div class="tab-info"><span>Example Domain</span><span class="close">✕</span></div>
+    </div>
+    <div class="tab-card">
+      <div class="tab-preview">🏠</div>
+      <div class="tab-info"><span>新标签页</span><span class="close">✕</span></div>
+    </div>
+    <div class="tab-card">
+      <div class="tab-preview">🌐</div>
+      <div class="tab-info"><span>GitHub</span><span class="close">✕</span></div>
+    </div>
+    <div class="tab-card">
+      <div class="tab-preview">🌐</div>
+      <div class="tab-info"><span>DuckDuckGo</span><span class="close">✕</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 底部菜单 ===== -->
+<div class="mock-group">
+<div class="section-title">☰ 底部多功能菜单</div>
+<div class="bottom-sheet" style="box-shadow:0 4px 30px rgba(0,0,0,.08);border-radius:24px;">
+  <div class="sheet-handle"></div>
+  <div class="menu-grid">
+    <div class="menu-item"><div class="icon-bg">🌙</div><span class="label">深色</span></div>
+    <div class="menu-item"><div class="icon-bg">⚙️</div><span class="label">设置</span></div>
+    <div class="menu-item"><div class="icon-bg">🛡️</div><span class="label">无痕</span></div>
+    <div class="menu-item"><div class="icon-bg">✨</div><span class="label">AI</span></div>
+    <div class="menu-item"><div class="icon-bg">🔖</div><span class="label">书签</span></div>
+    <div class="menu-item"><div class="icon-bg">🕐</div><span class="label">历史</span></div>
+  </div>
+</div>
+</div>
+
+<!-- ===== 设置页 ===== -->
+<div class="mock-group">
+<div class="section-title">⚙️ 设置页面</div>
+<div class="settings-screen" style="box-shadow:0 4px 30px rgba(0,0,0,.08);border-radius:24px;width:375px;">
+  <div class="settings-card">
+    <h4>🔍 搜索</h4>
+    <div class="sett-row"><span class="label">默认搜索引擎</span><span class="value">DuckDuckGo  ></span></div>
+    <div class="sett-row"><span class="label">首页</span><span class="value">新标签页  ></span></div>
+  </div>
+  <div class="settings-card">
+    <h4>🛡️ 隐私与安全</h4>
+    <div class="sett-row"><span class="label">广告过滤</span><div class="switch"></div></div>
+    <div class="sett-row"><span class="label">禁止追踪 (DNT)</span><div class="switch"></div></div>
+    <div class="sett-row"><span class="label">拦截第三方 Cookie</span><div class="switch"></div></div>
+  </div>
+  <div class="settings-card">
+    <h4>✨ AI 助手</h4>
+    <div class="sett-row"><span class="label">API 状态</span><span class="value" style="color:#34C759;">未配置  ></span></div>
+    <div class="sett-row"><span class="label">代理模式</span><div class="switch off"></div></div>
+  </div>
+</div>
+</div>
+
+<script>
+// 打字机模拟
+const poems = [
+  { text: '人生若只如初见，何事秋风悲画扇', author: '纳兰性德', title: '木兰花' },
+  { text: '众里寻他千百度，蓦然回首，那人却在，灯火阑珊处', author: '辛弃疾', title: '青玉案' },
+  { text: '行到水穷处，坐看云起时', author: '王维', title: '终南别业' },
+  { text: '但愿人长久，千里共婵娟', author: '苏轼', title: '水调歌头' },
+  { text: '竹杖芒鞋轻胜马，谁怕？一蓑烟雨任平生', author: '苏轼', title: '定风波' },
+];
+let pIdx = 0, cIdx = 0;
+const poemEl = document.querySelector('.poem-text');
+const authorEl = document.querySelector('.poem-author');
+function typePoem() {
+  const p = poems[pIdx % poems.length];
+  if (cIdx <= p.text.length) {
+    poemEl.innerHTML = p.text.slice(0, cIdx) + (cIdx < p.text.length ? '<span class="typing-cursor">▊</span>' : '');
+    cIdx++;
+    setTimeout(typePoem, 50);
+  } else {
+    authorEl.textContent = `—— ${p.author} 《${p.title}》`;
+    setTimeout(() => {
+      pIdx++; cIdx = 0;
+      setTimeout(typePoem, 200);
+    }, 4000);
+  }
+}
+typePoem();
+</script>
+</body>
+</html>
