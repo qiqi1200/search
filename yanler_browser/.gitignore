@@ -1,0 +1,51 @@
+# Flutter
+.dart_tool/
+.packages
+.pub/
+build/
+*.iml
+.idea/
+.metadata
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Android
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab
+
+# Windows
+windows/out/
+*.exe
+*.msix
+*.msi
+
+# macOS
+macos/Pods/
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+
+# Web
+web/build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flutter generated
+*.g.dart
+*.freezed.dart
+
+# Environment
+.env
+.env.local

@@ -1,0 +1,85 @@
+name: Build & Analyze
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 手动触发
+
+jobs:
+  analyze:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run analyze
+        run: flutter analyze
+
+  build_apk:
+    name: Build Android APK
+    needs: analyze
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --split-per-abi
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yanler-apk
+          path: |
+            build/app/outputs/flutter-apk/*.apk
+
+  build_windows:
+    name: Build Windows exe
+    needs: analyze
+    runs-on: windows-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yanler-windows
+          path: |
+            build/windows/runner/Release/
