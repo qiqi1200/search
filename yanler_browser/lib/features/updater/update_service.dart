@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -143,58 +144,128 @@ class UpdateService {
 
   /// 下载 APK 并调起系统安装器。返回 null 表示成功。
   ///
-  /// 依次尝试直连与 GitHub 加速镜像，任一成功即安装。
+  /// 修复「下载慢」：**并行竞速下载**——直连与各加速镜像同时下载，
+  /// 先完成者胜出（哪个源快就用哪个），每个源带 8 秒停滞检测，
+  /// 停滞源快速失败，不阻塞快源；进度回调上报所有源中的最大进度。
   static Future<String?> downloadAndInstall(
     String url, {
     ValueChanged<double>? onProgress,
+    ValueChanged<double>? onSpeed,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/yanler-update.apk');
 
-    final urls = [url, for (final m in _mirrors) '$m$url'];
-    Object? lastErr;
-    for (final u in urls) {
-      final err = await _downloadToFile(Uri.parse(u), file, onProgress);
-      if (err == null) {
-        // 调起系统安装器（open_filex 内部处理 FileProvider）
-        final result = await OpenFilex.open(file.path);
-        if (result.type != ResultType.done) {
-          return '无法打开安装器：${result.message}';
-        }
-        return null;
+    final sources = [url, for (final m in _mirrors) '$m$url'];
+    final completer = Completer<String?>();
+    final errs = List<String?>.filled(sources.length, null);
+    final parts = <String>[];
+    var finished = 0;
+    var maxProgress = 0.0;
+
+    void report(double p, double speed) {
+      if (p > maxProgress) {
+        maxProgress = p;
+        onProgress?.call(p);
       }
-      lastErr = err;
+      if (speed > 0) onSpeed?.call(speed);
     }
-    return '下载失败：$lastErr';
+
+    for (var i = 0; i < sources.length; i++) {
+      final part = File('${dir.path}/yanler-update.part$i');
+      parts.add(part.path);
+      final idx = i;
+      unawaited(_downloadOne(Uri.parse(sources[i]), part, report).then((err) {
+        finished++;
+        errs[idx] = err;
+        if (err == null && !completer.isCompleted) {
+          completer.complete(sources[idx]);
+        } else if (finished == sources.length && !completer.isCompleted) {
+          completer.complete(null); // 全部失败
+        }
+      }).catchError((Object e) {
+        finished++;
+        errs[idx] = e.toString();
+        if (finished == sources.length && !completer.isCompleted) {
+          completer.complete(null);
+        }
+      }));
+    }
+
+    final winner = await completer.future;
+
+    // 清理所有 part 文件
+    for (final p in parts) {
+      try {
+        await File(p).delete();
+      } catch (_) {}
+    }
+
+    if (winner == null) {
+      final firstErr = errs.firstWhere((e) => e != null, orElse: () => '未知错误');
+      return '下载失败：$firstErr';
+    }
+
+    // 把胜出的 part 改名为最终文件
+    final winIdx = sources.indexOf(winner);
+    final winPart = File(parts[winIdx]);
+    try {
+      if (await winPart.exists()) {
+        await winPart.rename(file.path);
+      }
+    } catch (_) {
+      await winPart.copy(file.path);
+      await winPart.delete();
+    }
+
+    // 调起系统安装器（open_filex 内部处理 FileProvider）
+    final result = await OpenFilex.open(file.path);
+    if (result.type != ResultType.done) {
+      return '无法打开安装器：${result.message}';
+    }
+    return null;
   }
 
-  /// 单个源下载到文件，成功返回 null，失败返回原因字符串
-  static Future<String?> _downloadToFile(
+  /// 单源下载到 part 文件，成功返回 null，失败返回原因字符串。
+  /// 带停滞检测：连续 8 秒无数据即抛超时，让调用方快速切换源。
+  static Future<String?> _downloadOne(
     Uri uri,
     File file,
-    ValueChanged<double>? onProgress,
+    void Function(double progress, double speed) report,
   ) async {
     final client = http.Client();
     try {
       final request = http.Request('GET', uri)
         ..headers['User-Agent'] = 'Yanler-Browser';
-      final resp = await client.send(request).timeout(_timeout * 5);
+      final resp = await client.send(request).timeout(const Duration(seconds: 30));
       if (resp.statusCode != 200) {
         return 'HTTP ${resp.statusCode}';
       }
 
       final total = resp.contentLength ?? 0;
       var received = 0;
+      final start = DateTime.now();
       final sink = file.openWrite();
       try {
-        await for (final chunk in resp.stream) {
+        // 8 秒无数据 → TimeoutException，该源失败
+        await for (final chunk in resp.stream.timeout(
+          const Duration(seconds: 8),
+        )) {
           sink.add(chunk);
           received += chunk.length;
-          if (total > 0) onProgress?.call((received / total).clamp(0.0, 1.0));
+          final elapsed = DateTime.now().difference(start).inMilliseconds;
+          if (total > 0) {
+            report(
+              (received / total).clamp(0.0, 1.0),
+              elapsed > 0 ? received / elapsed * 1000 : 0,
+            );
+          }
         }
         await sink.flush();
       } finally {
         await sink.close();
+      }
+      if (total > 0 && received != total) {
+        return '下载不完整：$received/$total';
       }
       return null;
     } catch (e) {
@@ -327,11 +398,12 @@ class _UpdateDialog extends StatelessWidget {
     );
   }
 
-  /// 下载（进度弹窗）→ 安装
+  /// 下载（进度弹窗，实时显示速度）→ 安装
   Future<void> _downloadAndInstallFlow(BuildContext context, UpdateInfo info) async {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final progress = ValueNotifier<double>(0);
+    final speed = ValueNotifier<double>(0);
 
     showDialog<void>(
       context: context,
@@ -345,10 +417,19 @@ class _UpdateDialog extends StatelessWidget {
               const Text('正在下载更新包…', style: TextStyle(fontSize: 13.5)),
               const SizedBox(height: 16),
               LinearProgressIndicator(value: value),
-              const SizedBox(height: 8),
-              Text(
-                '${(value * 100).toStringAsFixed(0)}%',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              const SizedBox(height: 10),
+              ValueListenableBuilder<double>(
+                valueListenable: speed,
+                builder: (context, spd, _) {
+                  final speedStr = spd > 0
+                      ? '${(spd / 1024 / 1024).toStringAsFixed(1)} MB/s'
+                      : '连接中…';
+                  return Text(
+                    '${(value * 100).toStringAsFixed(0)}%  ·  $speedStr'
+                    '  ·  多源竞速下载',
+                    style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                  );
+                },
               ),
             ],
           ),
@@ -359,8 +440,10 @@ class _UpdateDialog extends StatelessWidget {
     final error = await UpdateService.downloadAndInstall(
       info.url,
       onProgress: (p) => progress.value = p,
+      onSpeed: (s) => speed.value = s,
     );
     progress.dispose();
+    speed.dispose();
 
     if (!navigator.mounted) return;
     navigator.pop(); // 关闭进度弹窗
