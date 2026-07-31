@@ -16,7 +16,7 @@ class TabSwitcherSheet extends StatelessWidget {
     return LiquidGlass(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       blur: 26,
-      opacity: isDark ? 0.72 : 0.66,
+      opacity: isDark ? 0.6 : 0.55,
       borderWidth: 1,
       child: SizedBox(
         height: height,
@@ -162,7 +162,7 @@ class _TabCard extends StatelessWidget {
         child: LiquidGlass(
           borderRadius: BorderRadius.circular(18),
           blur: 14,
-          opacity: isActive ? 0.55 : 0.42,
+          opacity: isActive ? 0.45 : 0.35,
           borderWidth: isActive ? 1.4 : 0.9,
           tint: isActive ? theme.colorScheme.primary : null,
           child: Column(

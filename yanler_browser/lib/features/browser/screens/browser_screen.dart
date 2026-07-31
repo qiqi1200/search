@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../core/constants/search_engines.dart';
-import '../../../providers/ai_provider.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
+import '../../ai/ai_chat_screen.dart';
 import '../../bookmarks/bookmark_service.dart';
 import '../../bookmarks/bookmarks_screen.dart';
 import '../../history/history_service.dart';
@@ -170,7 +170,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                   onBack: () => _webViewController?.goBack(),
                   onForward: () => _webViewController?.goForward(),
                   onHome: () => _goHome(browser),
-                  onAI: () => _toggleAI(context),
+                  onAI: () => _openAIChat(context),
                   onTabSwitch: () => _showTabSwitcher(context),
                   onMenu: () => _showMenu(context),
                 ),
@@ -229,7 +229,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         },
         onToggleAI: () {
           Navigator.pop(context);
-          _toggleAI(context);
+          _openAIChat(context);
         },
         onOpenBookmarks: () {
           Navigator.pop(context);
@@ -290,26 +290,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
   }
 
-  void _toggleAI(BuildContext context) {
-    final aiProvider = context.read<AIProvider>();
-    if (aiProvider.isConfigured) {
-      aiProvider.toggleAgentMode();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            aiProvider.agentMode ? 'AI 代理模式已开启' : 'AI 代理模式已关闭',
-          ),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const SettingsScreen(),
-        ),
-      );
-    }
+  /// 打开 AI 聊天窗口（无论是否已配置，未配置时聊天页内引导）
+  void _openAIChat(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AIChatScreen()),
+    );
   }
 }
 
@@ -345,7 +331,7 @@ class _BottomMenuSheet extends StatelessWidget {
     return LiquidGlass(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       blur: 26,
-      opacity: isDark ? 0.74 : 0.68,
+      opacity: isDark ? 0.62 : 0.58,
       borderWidth: 1,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),

@@ -34,13 +34,41 @@ class WebViewContainer extends StatefulWidget {
 }
 
 class _WebViewContainerState extends State<WebViewContainer> {
+  InAppWebViewController? _controller;
+
   @override
   void initState() {
     super.initState();
   }
 
   @override
+  void didUpdateWidget(WebViewContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 修复：在已有页面时通过地址栏/搜索导航 — 外部 URL 变化要真正驱动 WebView 加载
+    final newUrl = widget.initialUrl;
+    if (newUrl.isNotEmpty &&
+        newUrl != oldWidget.initialUrl &&
+        _controller != null) {
+      _controller!.loadUrl(urlRequest: URLRequest(url: WebUri(newUrl)));
+    }
+  }
+
+  /// 刷新前进/后退可用状态（async 安全）
+  Future<void> _refreshNavState() async {
+    final c = _controller;
+    if (c == null) return;
+    try {
+      final canBack = await c.canGoBack();
+      final canFwd = await c.canGoForward();
+      widget.onNavigationStateChanged?.call(canBack, canFwd);
+    } catch (_) {
+      // WebView 尚未就绪时忽略
+    }
+  }
+
+  @override
   void dispose() {
+    _controller = null;
     super.dispose();
   }
 
@@ -64,6 +92,7 @@ class _WebViewContainerState extends State<WebViewContainer> {
         allowBackgroundAudioPlaying: true,
       ),
       onWebViewCreated: (controller) {
+        _controller = controller;
         widget.onControllerReady?.call(controller);
       },
       shouldInterceptRequest: (controller, request) async {
@@ -83,6 +112,8 @@ class _WebViewContainerState extends State<WebViewContainer> {
         if (url != null && url.toString().isNotEmpty) {
           widget.onUrlChanged(url.toString());
         }
+        // 导航开始时立即刷新前进/后退状态
+        _refreshNavState();
       },
       onProgressChanged: (controller, progress) {
         widget.onProgressChanged?.call(progress / 100.0);
@@ -94,9 +125,11 @@ class _WebViewContainerState extends State<WebViewContainer> {
           widget.onUrlChanged(url.toString());
         }
         // 更新前进/后退状态
-        final canBack = await controller.canGoBack();
-        final canFwd = await controller.canGoForward();
-        widget.onNavigationStateChanged?.call(canBack, canFwd);
+        _refreshNavState();
+      },
+      // 历史栈变化时（含前进/后退/链接跳转）实时刷新导航状态
+      onUpdateVisitedHistory: (controller, url, isReload) {
+        _refreshNavState();
       },
       onTitleChanged: (controller, title) {
         if (title != null) {

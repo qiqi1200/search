@@ -10,6 +10,7 @@ class SettingsProvider extends ChangeNotifier {
   bool _javascriptEnabled = true;
   String _homepage = '';
   double _fontSize = 1.0;
+  String _wallpaperId = 'default';
 
   ThemeMode get themeMode => _themeMode;
   String get searchEngine => _searchEngine;
@@ -19,6 +20,7 @@ class SettingsProvider extends ChangeNotifier {
   bool get javascriptEnabled => _javascriptEnabled;
   String get homepage => _homepage;
   double get fontSize => _fontSize;
+  String get wallpaperId => _wallpaperId;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
@@ -38,6 +40,7 @@ class SettingsProvider extends ChangeNotifier {
     _javascriptEnabled = prefs.getBool('javascriptEnabled') ?? true;
     _homepage = prefs.getString('homepage') ?? '';
     _fontSize = prefs.getDouble('fontSize') ?? 1.0;
+    _wallpaperId = prefs.getString('wallpaperId') ?? 'default';
     notifyListeners();
   }
 
@@ -60,6 +63,13 @@ class SettingsProvider extends ChangeNotifier {
     _homepage = homepage.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('homepage', _homepage);
+    notifyListeners();
+  }
+
+  Future<void> setWallpaper(String id) async {
+    _wallpaperId = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('wallpaperId', id);
     notifyListeners();
   }
 

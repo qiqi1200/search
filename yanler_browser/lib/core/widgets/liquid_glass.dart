@@ -70,9 +70,11 @@ class LiquidGlass extends StatelessWidget {
     final radius = borderRadius ?? BorderRadius.circular(16);
 
     final Color baseTint = tint ?? theme.colorScheme.surface;
+    // 通透度优化：浅色模式用纯白底（避免暖灰底色导致「发灰」），
+    // 深色模式略微提亮底色；不透明度整体下调，让背景透出来。
     final Color fill = isDark
-        ? Color.lerp(baseTint, Colors.white, 0.04)!
-        : Color.lerp(baseTint, Colors.white, 0.5)!;
+        ? Color.lerp(baseTint, Colors.white, 0.10)!
+        : Colors.white;
 
     final Widget surface = ClipRRect(
       borderRadius: radius,
@@ -92,21 +94,21 @@ class LiquidGlass extends StatelessWidget {
               color: fill.withValues(alpha: opacity),
             ),
           ),
-          // 3. 噪点纹理（折射颗粒感）
+          // 3. 噪点纹理（折射颗粒感）— 更轻，避免发灰
           if (noise)
             Positioned.fill(
               child: CustomPaint(
                 painter: _NoisePainter(
                   seed: 260607,
-                  density: isDark ? 0.06 : 0.045,
+                  density: isDark ? 0.045 : 0.03,
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.05)
-                      : Colors.black.withValues(alpha: 0.035),
-                  pointSize: 1.1,
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.025),
+                  pointSize: 1.0,
                 ),
               ),
             ),
-          // 4. 顶部镜面高光
+          // 4. 顶部镜面高光 — 更亮，强化玻璃感
           if (specular)
             Positioned.fill(
               child: DecoratedBox(
@@ -114,11 +116,11 @@ class LiquidGlass extends StatelessWidget {
                   borderRadius: radius,
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
-                    end: const Alignment(0, 0.35),
+                    end: const Alignment(0, 0.3),
                     colors: [
                       isDark
-                          ? Colors.white.withValues(alpha: 0.09)
-                          : Colors.white.withValues(alpha: 0.55),
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.white.withValues(alpha: 0.7),
                       Colors.transparent,
                     ],
                   ),
@@ -233,13 +235,13 @@ class _GlassBorderPainter extends CustomPainter {
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              Colors.white.withValues(alpha: 0.28),
-              Colors.white.withValues(alpha: 0.06),
-              accent.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 0.38),
+              Colors.white.withValues(alpha: 0.08),
+              accent.withValues(alpha: 0.12),
             ]
           : [
-              Colors.white.withValues(alpha: 0.95),
-              Colors.black.withValues(alpha: 0.10),
+              Colors.white.withValues(alpha: 1.0),
+              Colors.black.withValues(alpha: 0.07),
               accent.withValues(alpha: 0.12),
             ],
       stops: const [0.0, 0.55, 1.0],

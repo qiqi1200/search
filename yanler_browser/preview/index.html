@@ -136,14 +136,15 @@ p.page-sub { color:#8A8B93; font-size:12px; margin-bottom:18px; }
 #newtab::-webkit-scrollbar { display:none; }
 .nt-inner { width:100%; display:flex; flex-direction:column; align-items:center; padding:38px 32px 30px; }
 .brand {
-  font-family:'Outfit'; color:#fff;
+  font-family:'SourceHanSerifSC','Noto Serif SC','SimSun',serif;
+  color:#fff;
   text-shadow:0 2px 24px rgba(91,127,255,.25);
   height:88px; display:flex; align-items:center; justify-content:center;
   background:linear-gradient(135deg,#5B7FFF,#8B5CFF,#FF5C7B);
   -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
 }
-.brand .Y { font-size:54px; font-weight:200; letter-spacing:-4px; }
-.brand .rest { font-size:38px; font-weight:300; letter-spacing:4px; }
+.brand .Y { font-size:48px; font-weight:400; letter-spacing:-2px; }
+.brand .rest { font-size:32px; font-weight:400; letter-spacing:3px; }
 /* 诗词区 */
 .poem-area { height:100px; display:flex; align-items:center; justify-content:center; position:relative; width:100%; }
 .poem-holder, .brand-holder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; transition:opacity .5s var(--ease); }
@@ -450,7 +451,7 @@ html[data-theme="dark"] #page { background:#111114; }
     <div class="list">
       <div class="glass gborder setcard">
         <div class="h"><i>⌕</i>搜索</div>
-        <div class="setrow"><span>默认搜索引擎</span><span class="val" id="engineVal">Bing</span></div>
+        <div class="setrow"><span>默认搜索引擎</span><span class="val" id="engineVal">Yanler Search</span></div>
         <div class="setrow"><span>首页</span><span class="val">新标签页</span></div>
       </div>
       <div class="glass gborder setcard">
@@ -461,6 +462,7 @@ html[data-theme="dark"] #page { background:#111114; }
       </div>
       <div class="glass gborder setcard">
         <div class="h"><i>🎨</i>外观</div>
+        <div class="setrow" onclick="openWallpaperSheet()"><span>壁纸</span><span class="val" id="wallpaperVal">默认</span></div>
         <div class="setrow"><span>深色模式</span><span class="switch" data-on="0" onclick="toggleThemeFromSwitch(this)"></span></div>
       </div>
       <div class="glass gborder setcard">
@@ -542,11 +544,7 @@ const POEMS = [
   ['我见青山多妩媚，料青山见我应如是','辛弃疾','贺新郎'],
   ['桃李春风一杯酒，江湖夜雨十年灯','黄庭坚','寄黄几复'],
 ];
-const QUICK_DEFAULTS = [
-  ['哔哩哔哩','https://www.bilibili.com',1], ['知乎','https://www.zhihu.com',2],
-  ['百度','https://www.baidu.com',3], ['GitHub','https://github.com',4],
-  ['博客','https://blog.260607.best',5], ['微博','https://weibo.com',6],
-];
+const QUICK_DEFAULTS = []; // 首页默认不预置快捷链接，仅保留手动添加入口
 const SAMPLE_BOOKMARKS = [
   ['知乎 - 有问题，就会有答案','https://www.zhihu.com'],
   ['GitHub','https://github.com'],
@@ -805,6 +803,50 @@ function clearAllData() {
   renderQuick(); renderBookmarks(); renderHistory(); renderSettingsData(); toast('数据已清除');
 }
 
+/* ================= 壁纸 ================= */
+const WALLPAPERS = {
+  default:{name:'默认', light:['#F7F5F2','#F0EDE9'], dark:['#191A1E','#1D1E24']},
+  aurora:{name:'极光', light:['#DCEBFF','#E8DDF7','#F7DCE8'], dark:['#101828','#1A1633','#2A1630']},
+  dusk:{name:'暮色', light:['#FFE9D6','#FFD6D6','#E8D5F7'], dark:['#2A1712','#2E1420','#221433']},
+  ocean:{name:'深海', light:['#D6F2F0','#D6E8F7','#E0DCF7'], dark:['#0E1F24','#10202E','#161B30']},
+  forest:{name:'山野', light:['#E3F2E0','#E0EDE9','#E8E2D6'], dark:['#101D16','#12201C','#1A1C12']},
+  sakura:{name:'樱粉', light:['#FFF0F3','#FDE8F0','#F5EBFA'], dark:['#241820','#2A1722','#231A2B']},
+  paper:{name:'宣纸', light:['#F7F3E8','#F3EEE2','#EFEAE0'], dark:['#1D1B16','#22201A','#26231C']},
+};
+let wallpaper = localStorage.getItem('yanler_preview_wp') || 'default';
+function applyWallpaper(id) {
+  wallpaper = id;
+  const w = WALLPAPERS[id] || WALLPAPERS.default;
+  const cols = document.documentElement.dataset.theme === 'dark' ? w.dark : w.light;
+  document.getElementById('newtab').style.background = 'linear-gradient(180deg,' + cols.join(',') + ')';
+  document.getElementById('wallpaperVal').textContent = w.name;
+  localStorage.setItem('yanler_preview_wp', id);
+}
+function openWallpaperSheet() {
+  const dev = document.getElementById('device');
+  let mask = document.querySelector('.wp-mask');
+  if (mask) mask.remove();
+  mask = document.createElement('div');
+  mask.className = 'wp-mask';
+  mask.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:40;display:flex;align-items:flex-end;';
+  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  const colsNow = document.documentElement.dataset.theme === 'dark';
+  const sheet = document.createElement('div');
+  sheet.className = 'glass gborder';
+  sheet.style.cssText = 'width:100%;border-radius:28px 28px 0 0;padding:14px 14px 26px;';
+  sheet.innerHTML = '<div class="sheet-grab"></div><h3 style="margin:8px 6px 14px;font-size:15px">选择壁纸</h3><div style="display:flex;flex-wrap:wrap;gap:12px;padding:0 6px">' +
+    Object.entries(WALLPAPERS).map(([id, w]) => {
+      const cols = colsNow ? w.dark : w.light;
+      const sel = wallpaper === id;
+      return `<div class="press" style="text-align:center;width:64px" onclick="this.closest('.wp-mask').remove();applyWallpaper('${id}')">
+        <div style="width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,${cols.join(',')});border:${sel ? '2.5px solid #5B7FFF' : '1px solid rgba(128,128,128,.4)'}"></div>
+        <div style="font-size:11px;margin-top:6px;color:${sel ? '#5B7FFF' : 'var(--ink2)'}">${w.name}</div></div>`;
+    }).join('') + '</div>';
+  mask.appendChild(sheet);
+  dev.appendChild(mask);
+}
+applyWallpaper(wallpaper);
+
 /* ================= 设置 / 主题 ================= */
 function renderSettingsData() {
   $('dataBm').textContent = bookmarks.length + ' 个';
@@ -838,6 +880,8 @@ function toggleTheme(force) {
       sw.dataset.on = on ? '1' : '0';
     }
   });
+  // 壁纸跟随主题刷新
+  applyWallpaper(wallpaper);
 }
 
 function toast(msg) {

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/ai_provider.dart';
 import '../../core/constants/search_engines.dart';
+import '../../core/constants/wallpapers.dart';
 import '../../core/widgets/liquid_glass.dart';
+import '../ai/ai_config_sheet.dart';
 import '../bookmarks/bookmark_service.dart';
 import '../bookmarks/bookmarks_screen.dart';
 import '../history/history_service.dart';
@@ -184,7 +186,86 @@ class _AppearanceSection extends StatelessWidget {
           value: settings.isDarkMode ? '深色' : '浅色',
           onTap: () => settings.toggleTheme(),
         ),
+        const _Divider(),
+        _SettingsRow(
+          label: '壁纸',
+          value: _wallpaperName(settings.wallpaperId),
+          onTap: () => _showWallpaperPicker(context, settings),
+        ),
       ],
+    );
+  }
+
+  String _wallpaperName(String id) {
+    if (id == Wallpapers.defaultId) return '默认';
+    return Wallpapers.byId(id).name;
+  }
+
+  void _showWallpaperPicker(BuildContext context, SettingsProvider settings) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => LiquidGlass(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        blur: 24,
+        opacity: isDark ? 0.8 : 0.75,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('选择壁纸', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 14,
+                  children: [
+                    // 默认
+                    _WallpaperSwatch(
+                      label: '默认',
+                      selected: settings.wallpaperId == Wallpapers.defaultId,
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [const Color(0xFF191A1E), const Color(0xFF1D1E24)]
+                            : [const Color(0xFFF7F5F2), const Color(0xFFF0EDE9)],
+                      ),
+                      onTap: () {
+                        settings.setWallpaper(Wallpapers.defaultId);
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
+                    ...Wallpapers.presets.map((w) => _WallpaperSwatch(
+                          label: w.name,
+                          selected: settings.wallpaperId == w.id,
+                          gradient: LinearGradient(colors: w.colorsFor(Theme.of(context).brightness)),
+                          onTap: () {
+                            settings.setWallpaper(w.id);
+                            Navigator.pop(sheetContext);
+                          },
+                        )),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -229,124 +310,10 @@ class _AISection extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const _AIConfigSheet(),
+      builder: (_) => const AIConfigSheet(),
     );
   }
 }
-
-class _AIConfigSheet extends StatefulWidget {
-  const _AIConfigSheet();
-
-  @override
-  State<_AIConfigSheet> createState() => _AIConfigSheetState();
-}
-
-class _AIConfigSheetState extends State<_AIConfigSheet> {
-  final _keyController = TextEditingController();
-  final _urlController = TextEditingController(
-    text: 'https://api.openai.com/v1/chat/completions',
-  );
-  final _modelController = TextEditingController(text: 'gpt-3.5-turbo');
-
-  @override
-  void initState() {
-    super.initState();
-    final ai = context.read<AIProvider>();
-    // Don't prefill API key for security
-    _urlController.text = ai.apiUrl;
-    _modelController.text = ai.model;
-  }
-
-  @override
-  void dispose() {
-    _keyController.dispose();
-    _urlController.dispose();
-    _modelController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
-            ),
-            alignment: Alignment.center,
-          ),
-          const SizedBox(height: 24),
-          Text('配置 AI API', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _keyController,
-            decoration: const InputDecoration(
-              labelText: 'API Key',
-              hintText: 'sk-...',
-              border: OutlineInputBorder(),
-            ),
-            obscureText: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _urlController,
-            decoration: const InputDecoration(
-              labelText: 'API 地址',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _modelController,
-            decoration: const InputDecoration(
-              labelText: '模型名称',
-              hintText: 'gpt-3.5-turbo, deepseek-chat, etc.',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: () {
-                if (_keyController.text.trim().isEmpty) return;
-                context.read<AIProvider>().configure(
-                  apiKey: _keyController.text.trim(),
-                  apiUrl: _urlController.text.trim(),
-                  model: _modelController.text.trim(),
-                );
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('API 配置已保存')),
-                );
-              },
-              child: const Text('保存配置'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DataSection extends StatelessWidget {
   const _DataSection();
 
@@ -427,7 +394,7 @@ class _SettingsCard extends StatelessWidget {
     return LiquidGlass(
       borderRadius: BorderRadius.circular(20),
       blur: 18,
-      opacity: isDark ? 0.5 : 0.6,
+      opacity: isDark ? 0.45 : 0.5,
       borderWidth: 1,
       shadows: GlassTokens.softShadow(isDark),
       child: Padding(
@@ -526,6 +493,73 @@ class _Divider extends StatelessWidget {
       height: 1,
       thickness: 0.5,
       color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+    );
+  }
+}
+
+/// 壁纸选择色块
+class _WallpaperSwatch extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Gradient gradient;
+  final VoidCallback onTap;
+
+  const _WallpaperSwatch({
+    required this.label,
+    required this.selected,
+    required this.gradient,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              gradient: gradient,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.outline.withValues(alpha: 0.5),
+                width: selected ? 2.5 : 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: selected
+                ? Icon(
+                    Icons.check_rounded,
+                    size: 22,
+                    color: Colors.white.withValues(alpha: 0.9),
+                  )
+                : null,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.onSurfaceVariant,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

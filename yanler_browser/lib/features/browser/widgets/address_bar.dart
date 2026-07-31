@@ -74,7 +74,7 @@ class _AddressBarState extends State<AddressBar> {
       child: LiquidGlass(
         borderRadius: BorderRadius.circular(24),
         blur: 20,
-        opacity: isDark ? 0.5 : 0.6,
+        opacity: isDark ? 0.42 : 0.45,
         shadows: GlassTokens.softShadow(isDark),
         child: Column(
           mainAxisSize: MainAxisSize.min,

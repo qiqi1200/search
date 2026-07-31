@@ -3,14 +3,15 @@
 """Yanler 字体管线（重新生成时运行：python tool/process_fonts.py）
 
 1. 思源宋体 (SourceHanSerifCN-Regular.otf) 子集化
-   -> 仅保留 lib/core/utils/poem_database.dart 用到的字符，~144KB
+   -> 保留 lib/core/utils/poem_database.dart 用到的字符 + 拉丁字母/数字/常用标点，
+      ~150KB（拉丁字母用于「Yanler」品牌字标）
 2. Outfit 可变字体 -> 实例化静态字重 200/300/400/500/600/700
 
 源文件下载（GitHub 被墙时用 jsdelivr CDN）：
 - 宋体: https://cdn.jsdelivr.net/gh/adobe-fonts/source-han-serif@release/SubsetOTF/CN/SourceHanSerifCN-Regular.otf
 - Outfit: https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/outfit/Outfit%5Bwght%5D.ttf
 """
-import os, re, subprocess, sys, urllib.request
+import os, re, string, subprocess, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT_DIR = os.path.join(ROOT, "assets", "fonts")
@@ -43,6 +44,8 @@ titles = re.findall(r"title:\s*'([^']*)'", src)
 
 chars = set("".join(pairs + authors + titles))
 chars |= set("，。？！；：、——…《》【】“”‘’·（）年月日一二三四五六七八九十")
+# 拉丁字母/数字/标点（「Yanler」品牌字标 + 英文标点）
+chars |= set(string.ascii_letters + string.digits + " .,:;!?-()'\"")
 
 # 2) 子集化宋体
 fetch(SERIF_URL, SRC_SERIF)

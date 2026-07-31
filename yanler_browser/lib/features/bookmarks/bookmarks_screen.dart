@@ -92,7 +92,7 @@ class _BookmarkCard extends StatelessWidget {
     return LiquidGlass(
       borderRadius: BorderRadius.circular(18),
       blur: 16,
-      opacity: isDark ? 0.45 : 0.55,
+      opacity: isDark ? 0.4 : 0.45,
       borderWidth: 1,
       child: ListTile(
         onTap: onTap,

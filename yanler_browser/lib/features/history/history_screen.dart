@@ -57,7 +57,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
               child: LiquidGlass(
                 borderRadius: BorderRadius.circular(18),
                 blur: 16,
-                opacity: isDark ? 0.45 : 0.55,
+                opacity: isDark ? 0.4 : 0.45,
                 child: SizedBox(
                   height: 40,
                   child: Row(
@@ -189,7 +189,7 @@ class _HistoryCard extends StatelessWidget {
     return LiquidGlass(
       borderRadius: BorderRadius.circular(16),
       blur: 14,
-      opacity: isDark ? 0.4 : 0.5,
+      opacity: isDark ? 0.35 : 0.42,
       borderWidth: 0.9,
       child: ListTile(
         onTap: onTap,

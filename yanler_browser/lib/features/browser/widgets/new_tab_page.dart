@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/constants/wallpapers.dart';
 import '../../../core/utils/poem_database.dart';
 import '../../../core/widgets/liquid_glass.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/quick_links_provider.dart';
+import '../../../providers/settings_provider.dart';
 import '../../search/search_service.dart';
+import '../../search/search_suggestions.dart';
 
 /// 新标签页 — Yanler 品牌 Logo 与诗词交叉淡化 + 打字机动画
 ///
@@ -185,16 +188,21 @@ class _NewTabPageState extends State<NewTabPage>
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+    final wallpaper = Wallpapers.byId(settings.wallpaperId);
+    final useDefaultBg = settings.wallpaperId == Wallpapers.defaultId;
 
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            theme.colorScheme.surface,
-            isDark ? const Color(0xFF1D1E24) : const Color(0xFFF0EDE9),
-          ],
+          colors: useDefaultBg
+              ? [
+                  theme.colorScheme.surface,
+                  isDark ? const Color(0xFF1D1E24) : const Color(0xFFF0EDE9),
+                ]
+              : wallpaper.colorsFor(theme.brightness),
         ),
       ),
       child: SafeArea(
@@ -264,7 +272,7 @@ class _NewTabPageState extends State<NewTabPage>
   }
 }
 
-/// Yanler 文字 Logo — Outfit 字体，品牌渐变
+/// Yanler 文字 Logo — 思源宋体（古诗风格字体），品牌渐变
 class _YanlerText extends StatelessWidget {
   const _YanlerText();
 
@@ -288,21 +296,21 @@ class _YanlerText extends StatelessWidget {
             TextSpan(
               text: 'Y',
               style: TextStyle(
-                fontSize: 54,
-                fontWeight: FontWeight.w200,
-                letterSpacing: -4,
+                fontSize: 52,
+                fontWeight: FontWeight.w400,
+                letterSpacing: -2,
                 color: Colors.white,
-                fontFamily: 'Outfit',
+                fontFamily: 'SourceHanSerifSC',
               ),
             ),
             TextSpan(
               text: 'anler',
               style: TextStyle(
-                fontSize: 38,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 4,
+                fontSize: 34,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 3,
                 color: Colors.white,
-                fontFamily: 'Outfit',
+                fontFamily: 'SourceHanSerifSC',
               ),
             ),
           ],
@@ -376,11 +384,57 @@ class _SearchInputState extends State<_SearchInput> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
+  // 关联搜索（输入联想）
+  List<String> _suggestions = [];
+  Timer? _suggestDebounce;
+  bool _suggestLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onTextChanged);
+  }
+
   @override
   void dispose() {
+    _suggestDebounce?.cancel();
+    _controller.removeListener(_onTextChanged);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onTextChanged() {
+    _suggestDebounce?.cancel();
+    final q = _controller.text.trim();
+    if (q.isEmpty) {
+      if (_suggestions.isNotEmpty || _suggestLoading) {
+        setState(() {
+          _suggestions = [];
+          _suggestLoading = false;
+        });
+      }
+      return;
+    }
+    _suggestDebounce = Timer(const Duration(milliseconds: 260), () async {
+      if (!mounted) return;
+      setState(() => _suggestLoading = true);
+      final sugs = await SearchSuggestions.fetch(q);
+      if (!mounted) return;
+      // 输入已变化则丢弃结果
+      if (_controller.text.trim() != q) return;
+      setState(() {
+        _suggestions = sugs;
+        _suggestLoading = false;
+      });
+    });
+  }
+
+  void _submit(String value) {
+    _suggestDebounce?.cancel();
+    _suggestions = [];
+    _focusNode.unfocus();
+    if (value.trim().isNotEmpty) widget.onSubmit(value.trim());
   }
 
   @override
@@ -388,79 +442,165 @@ class _SearchInputState extends State<_SearchInput> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return LiquidGlass(
-      borderRadius: BorderRadius.circular(26),
-      blur: 22,
-      opacity: isDark ? 0.45 : 0.55,
-      shadows: GlassTokens.softShadow(isDark),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: SizedBox(
-          height: 50,
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Icon(
-                Icons.search_rounded,
-                size: 19,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _focusNode,
-                  decoration: InputDecoration(
-                    hintText: '搜索或输入网址',
-                    hintStyle: TextStyle(
-                      color: theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.55),
-                      fontSize: 14,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        LiquidGlass(
+          borderRadius: BorderRadius.circular(26),
+          blur: 22,
+          opacity: isDark ? 0.4 : 0.38,
+          shadows: GlassTokens.softShadow(isDark),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SizedBox(
+              height: 50,
+              child: Row(
+                children: [
+                  const SizedBox(width: 18),
+                  Icon(
+                    Icons.search_rounded,
+                    size: 19,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      decoration: InputDecoration(
+                        hintText: '搜索或输入网址',
+                        hintStyle: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.55),
+                          fontSize: 14,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      textInputAction: TextInputAction.go,
+                      onSubmitted: _submit,
                     ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface,
+                  if (_suggestLoading)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.6,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  Container(
+                    margin: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color(0xFF5B7FFF),
+                          Color(0xFF8B5CFF),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 17,
+                        color: Colors.white,
+                      ),
+                      onPressed: () {
+                        if (_controller.text.trim().isNotEmpty) {
+                          _submit(_controller.text.trim());
+                        }
+                      },
+                    ),
                   ),
-                  textInputAction: TextInputAction.go,
-                  onSubmitted: (value) {
-                    if (value.trim().isNotEmpty) widget.onSubmit(value.trim());
-                  },
-                ),
+                ],
               ),
-              Container(
-                margin: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF5B7FFF),
-                      Color(0xFF8B5CFF),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 17,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    if (_controller.text.trim().isNotEmpty) {
-                      widget.onSubmit(_controller.text.trim());
-                    }
-                  },
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+
+        // 关联搜索建议面板
+        if (_suggestions.isNotEmpty)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF212226).withValues(alpha: 0.92)
+                    : Colors.white.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.4),
+                ),
+                boxShadow: GlassTokens.softShadow(isDark),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: _suggestions.length.clamp(0, 6),
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  thickness: 0.4,
+                  indent: 40,
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+                itemBuilder: (context, index) {
+                  final s = _suggestions[index];
+                  return InkWell(
+                    onTap: () {
+                      _controller.text = s;
+                      _controller.selection = TextSelection.collapsed(
+                        offset: s.length,
+                      );
+                      _submit(s);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.north_west_rounded,
+                            size: 13,
+                            color: theme.colorScheme.onSurfaceVariant
+                                .withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              s,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                color: theme.colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

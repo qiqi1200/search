@@ -28,52 +28,15 @@ class QuickLinksProvider extends ChangeNotifier {
 
   List<QuickLink> get links => List.unmodifiable(_links);
 
-  /// 首次启动的默认快捷链接
-  static const List<QuickLink> _defaults = [
-    QuickLink(
-      id: 'default-bili',
-      title: '哔哩哔哩',
-      url: 'https://www.bilibili.com',
-    ),
-    QuickLink(
-      id: 'default-zhihu',
-      title: '知乎',
-      url: 'https://www.zhihu.com',
-    ),
-    QuickLink(
-      id: 'default-baidu',
-      title: '百度',
-      url: 'https://www.baidu.com',
-    ),
-    QuickLink(
-      id: 'default-github',
-      title: 'GitHub',
-      url: 'https://github.com',
-    ),
-    QuickLink(
-      id: 'default-blog',
-      title: '博客',
-      url: 'https://blog.260607.best',
-    ),
-    QuickLink(
-      id: 'default-weibo',
-      title: '微博',
-      url: 'https://weibo.com',
-    ),
-  ];
-
+  /// 首页默认不预置任何快捷链接（规则：仅保留用户手动添加入口与能力）
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getStringList('quickLinks') ?? [];
-    if (data.isEmpty) {
-      // 首次启动：写入默认链接
-      _links = List.of(_defaults);
-      await _save();
-    } else {
-      _links = data
-          .map((e) => QuickLink.fromJson(jsonDecode(e)))
-          .toList();
-    }
+    // 旧版本若写入过默认链接，迁移时也不预置；只保留用户手动添加的
+    _links = data
+        .map((e) => QuickLink.fromJson(jsonDecode(e)))
+        .where((l) => !l.id.startsWith('default-'))
+        .toList();
     notifyListeners();
   }
 

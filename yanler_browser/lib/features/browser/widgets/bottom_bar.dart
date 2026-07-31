@@ -41,7 +41,7 @@ class BottomBar extends StatelessWidget {
     return LiquidGlass(
       borderRadius: BorderRadius.zero,
       blur: 24,
-      opacity: isDark ? 0.6 : 0.62,
+      opacity: isDark ? 0.5 : 0.5,
       borderWidth: 0.8,
       child: Padding(
         padding: EdgeInsets.only(
