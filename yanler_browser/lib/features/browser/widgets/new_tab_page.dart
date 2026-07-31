@@ -1,10 +1,16 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/utils/poem_database.dart';
+import '../../../core/widgets/liquid_glass.dart';
+import '../../../providers/browser_provider.dart';
+import '../../../providers/quick_links_provider.dart';
 import '../../search/search_service.dart';
 
-/// 新标签页 — 显示 Yanler 品牌与诗词交叉淡化 + 打字机动画
+/// 新标签页 — Yanler 品牌 Logo 与诗词交叉淡化 + 打字机动画
+///
+/// 视觉层：Outfit 品牌字标 / 思源宋体诗词 / 液态玻璃搜索框 / 快捷链接
 class NewTabPage extends StatefulWidget {
   const NewTabPage({super.key});
 
@@ -16,12 +22,11 @@ class _NewTabPageState extends State<NewTabPage>
     with SingleTickerProviderStateMixin {
   late AnimationController _crossFade;
 
-  // 打字机状态
+  // 打字机状态（保持原逻辑不变）
   ChinesePoem _currentPoem = PoemDatabase.randomPoem;
   int _charIndex = 0;
   String _displayedPoem = '';
   bool _showingPoem = false;
-  bool _typewriterRunning = false;
 
   // 生命周期安全
   bool _disposed = false;
@@ -67,7 +72,7 @@ class _NewTabPageState extends State<NewTabPage>
   /// 调度 Logo 阶段 → 倒计时后切到诗词
   void _scheduleLogoPhase() {
     _phaseTimer?.cancel();
-    _phaseTimer = Timer(Duration(milliseconds: _logoDuration), () {
+    _phaseTimer = Timer(const Duration(milliseconds: _logoDuration), () {
       if (_disposed) return;
       _switchToPoem();
     });
@@ -77,8 +82,8 @@ class _NewTabPageState extends State<NewTabPage>
   void _schedulePoemPhase() {
     _phaseTimer?.cancel();
     // 总时长 = 最短展示 + 额外停留（如果打字很快完成）
-    final totalDuration = _poemMinDuration + _poemExtraDuration;
-    _phaseTimer = Timer(Duration(milliseconds: totalDuration), () {
+    const totalDuration = _poemMinDuration + _poemExtraDuration;
+    _phaseTimer = Timer(const Duration(milliseconds: totalDuration), () {
       if (_disposed) return;
       _switchToLogo();
     });
@@ -102,7 +107,6 @@ class _NewTabPageState extends State<NewTabPage>
       _charIndex = 0;
       _displayedPoem = '';
       _showingPoem = true;
-      _typewriterRunning = false;
     });
 
     // 交叉淡化到诗词
@@ -128,7 +132,6 @@ class _NewTabPageState extends State<NewTabPage>
 
     setState(() {
       _showingPoem = false;
-      _typewriterRunning = false;
     });
 
     // 交叉淡化回 Logo
@@ -139,13 +142,12 @@ class _NewTabPageState extends State<NewTabPage>
   }
 
   // ===============================================================
-  // 打字机
+  // 打字机（逻辑保持不变）
   // ===============================================================
 
   void _startTypewriter() {
     if (_disposed || !_showingPoem) return;
 
-    _typewriterRunning = true;
     _typewriterTimer = Timer.periodic(
       const Duration(milliseconds: _typewriterInterval),
       _onTypewriterTick,
@@ -161,7 +163,6 @@ class _NewTabPageState extends State<NewTabPage>
     if (!_showingPoem) {
       // 阶段已切换，停止打字
       t.cancel();
-      _typewriterRunning = false;
       return;
     }
 
@@ -173,7 +174,6 @@ class _NewTabPageState extends State<NewTabPage>
     } else {
       // 打字完成
       t.cancel();
-      _typewriterRunning = false;
     }
   }
 
@@ -193,83 +193,65 @@ class _NewTabPageState extends State<NewTabPage>
           end: Alignment.bottomCenter,
           colors: [
             theme.colorScheme.surface,
-            isDark
-                ? const Color(0xFF1E1E24)
-                : const Color(0xFFF0EDE9),
+            isDark ? const Color(0xFF1D1E24) : const Color(0xFFF0EDE9),
           ],
         ),
       ),
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const SizedBox(height: 60),
+      child: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 48),
 
-              // 交替区域：Yanler 文字 ↔ 诗词（交叉淡化），无APP图标
-              SizedBox(
-                height: 90,
-                child: AnimatedBuilder(
-                  animation: _crossFade,
-                  builder: (context, child) {
-                    final t = _crossFade.value;
-                    return Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Yanler Logo
-                        Opacity(
-                          opacity: 1.0 - t,
-                          child: _YanlerText(isDark: isDark),
-                        ),
-                        // 诗词
-                        Opacity(
-                          opacity: t,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _displayedPoem +
-                                    (_showingPoem &&
-                                            _charIndex < _currentPoem.content.length
-                                        ? '▊'
-                                        : ''),
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  height: 1.5,
-                                  color: theme.colorScheme.onSurface,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                              if (_charIndex >= _currentPoem.content.length &&
-                                  _showingPoem)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 6),
-                                  child: Text(
-                                    '—— ${_currentPoem.author} 《${_currentPoem.title}》',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                // 交替区域：Yanler 文字 ↔ 诗词（交叉淡化）
+                SizedBox(
+                  height: 100,
+                  child: AnimatedBuilder(
+                    animation: _crossFade,
+                    builder: (context, child) {
+                      final t = _crossFade.value;
+                      return Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Yanler Logo
+                          Opacity(
+                            opacity: 1.0 - t,
+                            child: const _YanlerText(),
                           ),
-                        ),
-                      ],
-                    );
-                  },
+                          // 诗词
+                          Opacity(
+                            opacity: t,
+                            child: _PoemDisplay(
+                              poem: _currentPoem,
+                              displayed: _displayedPoem,
+                              typing: _showingPoem &&
+                                  _charIndex < _currentPoem.content.length,
+                              complete: _showingPoem &&
+                                  _charIndex >= _currentPoem.content.length,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 40),
+                const SizedBox(height: 36),
 
-              // 搜索框
-              _SearchInput(onSubmit: _onSearch),
+                // 搜索框 — 液态玻璃
+                _SearchInput(onSubmit: _onSearch),
 
-              const SizedBox(height: 80),
-            ],
+                const SizedBox(height: 40),
+
+                // 快捷链接 — Speed Dial
+                const _QuickLinksSection(),
+
+                const SizedBox(height: 56),
+              ],
+            ),
           ),
         ),
       ),
@@ -282,13 +264,14 @@ class _NewTabPageState extends State<NewTabPage>
   }
 }
 
-// Yanler 文字 Logo
+/// Yanler 文字 Logo — Outfit 字体，品牌渐变
 class _YanlerText extends StatelessWidget {
-  final bool isDark;
-  const _YanlerText({required this.isDark});
+  const _YanlerText();
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return ShaderMask(
       shaderCallback: (bounds) => LinearGradient(
         begin: Alignment.topLeft,
@@ -305,21 +288,21 @@ class _YanlerText extends StatelessWidget {
             TextSpan(
               text: 'Y',
               style: TextStyle(
-                fontSize: 50,
+                fontSize: 54,
                 fontWeight: FontWeight.w200,
-                letterSpacing: -2,
+                letterSpacing: -4,
                 color: Colors.white,
-                fontFamily: 'serif',
+                fontFamily: 'Outfit',
               ),
             ),
             TextSpan(
               text: 'anler',
               style: TextStyle(
-                fontSize: 36,
+                fontSize: 38,
                 fontWeight: FontWeight.w300,
-                letterSpacing: 6,
+                letterSpacing: 4,
                 color: Colors.white,
-                fontFamily: 'serif',
+                fontFamily: 'Outfit',
               ),
             ),
           ],
@@ -329,7 +312,58 @@ class _YanlerText extends StatelessWidget {
   }
 }
 
-// 搜索输入框
+/// 诗词展示 — 思源宋体，古籍排印气质
+class _PoemDisplay extends StatelessWidget {
+  final ChinesePoem poem;
+  final String displayed;
+  final bool typing;
+  final bool complete;
+
+  const _PoemDisplay({
+    required this.poem,
+    required this.displayed,
+    required this.typing,
+    required this.complete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          displayed + (typing ? '▊' : ''),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 17,
+            height: 1.7,
+            letterSpacing: 1.5,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.92),
+            fontFamily: 'SourceHanSerifSC',
+          ),
+        ),
+        if (complete)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              '—— ${poem.author} 《${poem.title}》',
+              style: TextStyle(
+                fontSize: 11.5,
+                letterSpacing: 2,
+                color: theme.colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.85),
+                fontFamily: 'SourceHanSerifSC',
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 搜索输入框 — 液态玻璃
 class _SearchInput extends StatefulWidget {
   final void Function(String) onSubmit;
   const _SearchInput({required this.onSubmit});
@@ -354,71 +388,356 @@ class _SearchInputState extends State<_SearchInput> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 480),
-      height: 48,
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF2A2A2E).withValues(alpha: 0.8)
-            : Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.08),
+    return LiquidGlass(
+      borderRadius: BorderRadius.circular(26),
+      blur: 22,
+      opacity: isDark ? 0.45 : 0.55,
+      shadows: GlassTokens.softShadow(isDark),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: SizedBox(
+          height: 50,
+          child: Row(
+            children: [
+              const SizedBox(width: 18),
+              Icon(
+                Icons.search_rounded,
+                size: 19,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  focusNode: _focusNode,
+                  decoration: InputDecoration(
+                    hintText: '搜索或输入网址',
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.55),
+                      fontSize: 14,
+                    ),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  textInputAction: TextInputAction.go,
+                  onSubmitted: (value) {
+                    if (value.trim().isNotEmpty) widget.onSubmit(value.trim());
+                  },
+                ),
+              ),
+              Container(
+                margin: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF5B7FFF),
+                      Color(0xFF8B5CFF),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 17,
+                    color: Colors.white,
+                  ),
+                  onPressed: () {
+                    if (_controller.text.trim().isNotEmpty) {
+                      widget.onSubmit(_controller.text.trim());
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? Colors.black.withValues(alpha: 0.2)
-                : Colors.black.withValues(alpha: 0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+      ),
+    );
+  }
+}
+
+/// 快捷链接区 — Speed Dial（Vivaldi / Chrome 同款）
+class _QuickLinksSection extends StatelessWidget {
+  const _QuickLinksSection();
+
+  static const List<List<Color>> _palette = [
+    [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+    [Color(0xFF00B8A9), Color(0xFF00A3E0)],
+    [Color(0xFFFF8E53), Color(0xFFFF5C7B)],
+    [Color(0xFF7B61FF), Color(0xFFB05CFF)],
+    [Color(0xFF2E9EFF), Color(0xFF00C6A7)],
+    [Color(0xFFF95C7B), Color(0xFFF7A35C)],
+  ];
+
+  static List<Color> _colorsFor(String url) {
+    final hash = url.codeUnits.fold<int>(17, (a, b) => (a * 31 + b) & 0xFFFF);
+    return _palette[hash % _palette.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final quickLinks = context.watch<QuickLinksProvider>();
+    final browser = context.read<BrowserProvider>();
+
+    if (quickLinks.links.isEmpty) return const SizedBox.shrink();
+
+    // 网格宽度随屏宽自适应：4 列
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tileWidth = ((screenWidth - 64) / 4).clamp(56.0, 88.0);
+
+    return Column(
+      children: [
+        Text(
+          '快捷链接',
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 2,
+            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: ((screenWidth - 64 - tileWidth * 4) / 3).clamp(0.0, 24.0),
+          runSpacing: 18,
+          alignment: WrapAlignment.center,
+          children: [
+            ...quickLinks.links.map((link) {
+              final colors = _colorsFor(link.url);
+              return _QuickLinkTile(
+                width: tileWidth,
+                title: link.title,
+                colors: colors,
+                onTap: () {
+                  if (link.url.isNotEmpty) {
+                    browser.addTab(url: link.url);
+                  }
+                },
+                onLongPress: () => _confirmRemove(context, quickLinks, link),
+              );
+            }),
+            _AddTile(
+              width: tileWidth,
+              onTap: () => _showAddDialog(context, quickLinks),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _confirmRemove(
+    BuildContext context,
+    QuickLinksProvider quickLinks,
+    QuickLink link,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('移除快捷链接'),
+        content: Text('确定移除「${link.title}」吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              quickLinks.remove(link.id);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('移除', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
-      child: Row(
-        children: [
-          const SizedBox(width: 18),
-          Icon(Icons.search, size: 18, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              decoration: InputDecoration(
-                hintText: '搜索或输入网址',
-                hintStyle: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                  fontSize: 14,
-                ),
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 13),
+    );
+  }
+
+  void _showAddDialog(BuildContext context, QuickLinksProvider quickLinks) {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+    final theme = Theme.of(context);
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加快捷链接'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: '名称',
+                hintText: '例如：知乎',
+                border: OutlineInputBorder(),
               ),
-              style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface),
-              textInputAction: TextInputAction.go,
-              onSubmitted: (value) {
-                if (value.trim().isNotEmpty) widget.onSubmit(value.trim());
-              },
             ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: '网址',
+                hintText: 'https://example.com',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.url,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
           ),
-          Container(
-            margin: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(19),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_forward, size: 16, color: Colors.white),
-              onPressed: () {
-                if (_controller.text.trim().isNotEmpty) {
-                  widget.onSubmit(_controller.text.trim());
-                }
-              },
-            ),
+          TextButton(
+            onPressed: () {
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+              final normalized =
+                  url.contains('.') ? url : 'https://$url';
+              quickLinks.add(titleController.text, normalized);
+              Navigator.pop(dialogContext);
+            },
+            child: Text('添加', style: TextStyle(color: theme.colorScheme.primary)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 单个快捷链接磁贴
+class _QuickLinkTile extends StatelessWidget {
+  final double width;
+  final String title;
+  final List<Color> colors;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _QuickLinkTile({
+    required this.width,
+    required this.title,
+    required this.colors,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      width: width,
+      child: GestureDetector(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 字母头像 — 渐变圆
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: colors,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors[1].withValues(alpha: 0.28),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  title.characters.first.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                    fontFamily: 'Outfit',
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 添加磁贴
+class _AddTile extends StatelessWidget {
+  final double width;
+  final VoidCallback onTap;
+
+  const _AddTile({required this.width, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return SizedBox(
+      width: width,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh
+                    .withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Icon(
+                Icons.add_rounded,
+                size: 22,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              '添加',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: theme.colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

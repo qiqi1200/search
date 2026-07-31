@@ -1,5 +1,8 @@
 allprojects {
     repositories {
+        // 国内镜像（校园网无法直连 google()）
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/central' }
         google()
         mavenCentral()
     }

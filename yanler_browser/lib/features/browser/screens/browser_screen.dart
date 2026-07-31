@@ -7,11 +7,16 @@ import '../../../core/constants/search_engines.dart';
 import '../../../providers/ai_provider.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
+import '../../bookmarks/bookmark_service.dart';
+import '../../bookmarks/bookmarks_screen.dart';
+import '../../history/history_service.dart';
+import '../../history/history_screen.dart';
 import '../widgets/address_bar.dart';
 import '../widgets/bottom_bar.dart';
 import '../widgets/tab_switcher.dart';
 import '../widgets/new_tab_page.dart';
 import '../widgets/webview_container.dart';
+import '../../../core/widgets/liquid_glass.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -27,6 +32,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   InAppWebViewController? _webViewController;
   bool _canGoBack = false;
   bool _canGoForward = false;
+  double _progress = 0.0;
 
   @override
   void initState() {
@@ -69,6 +75,18 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
+  /// 刷新/停止 — 加载中停止，否则刷新
+  void _onRefreshPressed() {
+    final controller = _webViewController;
+    if (controller == null) return;
+    final activeTab = context.read<BrowserProvider>().activeTab;
+    if (activeTab?.isLoading == true) {
+      controller.stopLoading();
+    } else {
+      controller.reload();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<BrowserProvider, SettingsProvider>(
@@ -85,6 +103,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   AddressBar(
                     url: browser.activeTab?.url ?? '',
                     isLoading: browser.activeTab?.isLoading ?? false,
+                    progress: _progress,
+                    onRefresh: _onRefreshPressed,
                     onSubmitted: _onUrlSubmitted,
                   ),
 
@@ -106,12 +126,24 @@ class _BrowserScreenState extends State<BrowserScreen>
                             final activeIndex = browser.activeTabIndex;
                             if (activeIndex >= 0) {
                               browser.updateTabTitle(activeIndex, title);
+                              // 记录历史（Firefox/Chrome 同款行为）
+                              final url = browser.activeTab?.url;
+                              if (url != null && url.isNotEmpty) {
+                                context
+                                    .read<HistoryService>()
+                                    .add(title, url);
+                              }
                             }
                           },
                           onLoadingChanged: (loading) {
                             final activeIndex = browser.activeTabIndex;
                             if (activeIndex >= 0) {
                               browser.setTabLoading(activeIndex, loading);
+                            }
+                          },
+                          onProgressChanged: (progress) {
+                            if (mounted) {
+                              setState(() => _progress = progress);
                             }
                           },
                           onControllerReady: (controller) {
@@ -174,11 +206,15 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   void _showMenu(BuildContext context) {
     final adblock = context.read<AdblockEngine>();
+    final browser = context.read<BrowserProvider>();
+    final currentUrl = browser.activeTab?.url ?? '';
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (_) => _BottomMenuSheet(
         adBlockCount: adblock.blockedCount,
+        canBookmark: currentUrl.isNotEmpty,
         onToggleTheme: () {
           context.read<SettingsProvider>().toggleTheme();
           Navigator.pop(context);
@@ -195,8 +231,50 @@ class _BrowserScreenState extends State<BrowserScreen>
           Navigator.pop(context);
           _toggleAI(context);
         },
+        onOpenBookmarks: () {
+          Navigator.pop(context);
+          _openBookmarks(context);
+        },
+        onOpenHistory: () {
+          Navigator.pop(context);
+          _openHistory(context);
+        },
+        onAddBookmark: () {
+          final title = browser.activeTab?.title ?? '未命名';
+          context.read<BookmarkService>().add(title, currentUrl);
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('已收藏到书签'),
+              duration: Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
       ),
     );
+  }
+
+  void _openBookmarks(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const BookmarksScreen()),
+    ).then((url) {
+      if (url is String && url.isNotEmpty && context.mounted) {
+        context.read<BrowserProvider>().addTab(url: url);
+      }
+    });
+  }
+
+  void _openHistory(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+    ).then((url) {
+      if (url is String && url.isNotEmpty && context.mounted) {
+        context.read<BrowserProvider>().addTab(url: url);
+      }
+    });
   }
 
   void _openSettings(BuildContext context) {
@@ -205,7 +283,11 @@ class _BrowserScreenState extends State<BrowserScreen>
       MaterialPageRoute(
         builder: (_) => const SettingsScreen(),
       ),
-    );
+    ).then((url) {
+      if (url is String && url.isNotEmpty && context.mounted) {
+        context.read<BrowserProvider>().addTab(url: url);
+      }
+    });
   }
 
   void _toggleAI(BuildContext context) {
@@ -231,20 +313,28 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 }
 
-// 底部菜单面板（三点菜单）
+// 底部菜单面板（三点菜单）— 液态玻璃
 class _BottomMenuSheet extends StatelessWidget {
   final int adBlockCount;
+  final bool canBookmark;
   final VoidCallback onToggleTheme;
   final VoidCallback onOpenSettings;
   final VoidCallback onToggleIncognito;
   final VoidCallback onToggleAI;
+  final VoidCallback onOpenBookmarks;
+  final VoidCallback onOpenHistory;
+  final VoidCallback onAddBookmark;
 
   const _BottomMenuSheet({
     required this.adBlockCount,
+    required this.canBookmark,
     required this.onToggleTheme,
     required this.onOpenSettings,
     required this.onToggleIncognito,
     required this.onToggleAI,
+    required this.onOpenBookmarks,
+    required this.onOpenHistory,
+    required this.onAddBookmark,
   });
 
   @override
@@ -252,102 +342,116 @@ class _BottomMenuSheet extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 拖拽指示条
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
+    return LiquidGlass(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      blur: 26,
+      opacity: isDark ? 0.74 : 0.68,
+      borderWidth: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 拖拽指示条
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 14),
 
-          // 广告拦截统计条
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.shield_outlined, size: 14, color: theme.colorScheme.primary),
-                const SizedBox(width: 6),
-                Text(
-                  '广告拦截',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+            // 广告拦截统计条
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh
+                    .withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.4),
                 ),
-                const Spacer(),
-                Text(
-                  '已拦截 $adBlockCount 个',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.shield_outlined,
+                    size: 14,
                     color: theme.colorScheme.primary,
                   ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '广告拦截',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '已拦截 $adBlockCount 个',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // 功能宫格：4 + 3
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 12,
+              children: [
+                _MenuButton(
+                  icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                  label: isDark ? '浅色' : '深色',
+                  onTap: onToggleTheme,
                 ),
+                _MenuButton(
+                  icon: Icons.settings_rounded,
+                  label: '设置',
+                  onTap: onOpenSettings,
+                ),
+                _MenuButton(
+                  icon: Icons.privacy_tip_outlined,
+                  label: '无痕',
+                  onTap: onToggleIncognito,
+                ),
+                _MenuButton(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'AI',
+                  onTap: onToggleAI,
+                ),
+                _MenuButton(
+                  icon: Icons.bookmark_border_rounded,
+                  label: '书签',
+                  onTap: onOpenBookmarks,
+                ),
+                _MenuButton(
+                  icon: Icons.history_rounded,
+                  label: '历史',
+                  onTap: onOpenHistory,
+                ),
+                if (canBookmark)
+                  _MenuButton(
+                    icon: Icons.bookmark_add_outlined,
+                    label: '收藏此页',
+                    onTap: onAddBookmark,
+                  ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _MenuButton(
-                icon: isDark ? Icons.light_mode : Icons.dark_mode,
-                label: isDark ? '浅色' : '深色',
-                onTap: onToggleTheme,
-              ),
-              _MenuButton(
-                icon: Icons.settings,
-                label: '设置',
-                onTap: onOpenSettings,
-              ),
-              _MenuButton(
-                icon: Icons.privacy_tip_outlined,
-                label: '无痕',
-                onTap: onToggleIncognito,
-              ),
-              _MenuButton(
-                icon: Icons.auto_awesome,
-                label: 'AI',
-                onTap: onToggleAI,
-              ),
-              _MenuButton(
-                icon: Icons.bookmark_border,
-                label: '书签',
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: Show bookmarks
-                },
-              ),
-              _MenuButton(
-                icon: Icons.history,
-                label: '历史',
-                onTap: () {
-                  Navigator.pop(context);
-                  // TODO: Show history
-                },
-              ),
-            ],
-          ),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -369,13 +473,15 @@ class _MenuButton extends StatelessWidget {
     final theme = Theme.of(context);
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh,
+              color: theme.colorScheme.surfaceContainerHigh
+                  .withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
                 color: theme.colorScheme.outline.withValues(alpha: 0.5),

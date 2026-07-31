@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yanler UI 预览 — 交互原型</title>
+<style>
+/* ============ 字体（使用项目真实字体文件，可检查覆盖情况） ============ */
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-ExtraLight.ttf') format('truetype'); font-weight:200; }
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-Light.ttf') format('truetype'); font-weight:300; }
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-Regular.ttf') format('truetype'); font-weight:400; }
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-Medium.ttf') format('truetype'); font-weight:500; }
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-SemiBold.ttf') format('truetype'); font-weight:600; }
+@font-face { font-family:'Outfit'; src:url('../assets/fonts/Outfit-Bold.ttf') format('truetype'); font-weight:700; }
+@font-face { font-family:'SourceHanSerifSC'; src:url('../assets/fonts/SourceHanSerifSC-Regular.otf') format('opentype'); font-weight:400; }
+
+:root {
+  --radius: 16px;
+  --ease: cubic-bezier(.16,1,.3,1);
+}
+/* 主题变量 */
+html[data-theme="light"] {
+  --bg0:#F7F5F2; --bg1:#F0EDE9;
+  --surface:rgba(255,255,255,.55);
+  --surface-strong:rgba(255,255,255,.68);
+  --surface-soft:rgba(233,229,224,.55);
+  --ink:#191A1E; --ink2:#5F6068; --ink3:#9B9CA4;
+  --line:rgba(0,0,0,.10);
+  --glass-blur:blur(20px) saturate(180%);
+  --noise:rgba(0,0,0,.035);
+  --spec:linear-gradient(180deg, rgba(255,255,255,.6), rgba(255,255,255,0) 38%);
+  --gborder:linear-gradient(180deg, rgba(255,255,255,.95), rgba(0,0,0,.10) 55%, rgba(91,127,255,.18));
+  --shadow:0 8px 24px rgba(0,0,0,.06), 0 2px 6px rgba(0,0,0,.04);
+  --card-border:rgba(0,0,0,.08);
+}
+html[data-theme="dark"] {
+  --bg0:#191A1E; --bg1:#1D1E24;
+  --surface:rgba(255,255,255,.06);
+  --surface-strong:rgba(255,255,255,.10);
+  --surface-soft:rgba(48,49,54,.6);
+  --ink:#E9E7E3; --ink2:#9B9CA4; --ink3:#5F6068;
+  --line:rgba(255,255,255,.10);
+  --glass-blur:blur(20px) saturate(160%);
+  --noise:rgba(255,255,255,.05);
+  --spec:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,0) 38%);
+  --gborder:linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.06) 55%, rgba(123,159,255,.14));
+  --shadow:0 8px 24px rgba(0,0,0,.28), 0 2px 6px rgba(0,0,0,.14);
+  --card-border:rgba(255,255,255,.09);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body {
+  font-family:'Outfit','Microsoft YaHei',system-ui,sans-serif;
+  background:#0E0F13; color:var(--ink);
+  min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  padding:24px 16px 60px;
+}
+h1.page-title { color:#fff; font-weight:300; font-size:20px; letter-spacing:.5px; margin-bottom:6px; }
+p.page-sub { color:#8A8B93; font-size:12px; margin-bottom:18px; }
+
+/* 顶部控制条 */
+.toolbar { display:flex; gap:8px; align-items:center; margin-bottom:22px; flex-wrap:wrap; justify-content:center; }
+.toolbar button {
+  font-family:inherit; font-size:12px; color:#D8D9DE; background:#1E1F26;
+  border:1px solid #2E2F36; border-radius:10px; padding:6px 14px; cursor:pointer;
+  transition:all .15s var(--ease);
+}
+.toolbar button:hover { background:#282A33; }
+.toolbar button.active { background:linear-gradient(135deg,#5B7FFF,#8B5CFF); border-color:transparent; color:#fff; }
+
+/* ============ 设备框 ============ */
+.stage { position:relative; }
+#device {
+  width:390px; height:800px;
+  background:var(--bg0);
+  border-radius:44px; overflow:hidden; position:relative;
+  box-shadow:0 40px 90px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.07);
+  transition:width .5s var(--ease), height .5s var(--ease);
+  border:6px solid #2A2B31;
+}
+#device.desktop { width:960px; height:640px; border-radius:24px; }
+
+/* 状态栏（模拟） */
+.statusbar {
+  height:30px; display:flex; justify-content:space-between; align-items:center;
+  padding:0 22px; font-size:11px; color:var(--ink2); font-weight:500; letter-spacing:.3px;
+}
+
+/* 屏幕容器 */
+.screen { position:absolute; inset:30px 0 0; display:none; flex-direction:column; }
+.screen.active { display:flex; }
+.screen.fade-in { animation:fadeIn .35s var(--ease); }
+@keyframes fadeIn { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+/* ============ 液态玻璃 ============ */
+.glass {
+  position:relative;
+  background:var(--surface);
+  -webkit-backdrop-filter:var(--glass-blur);
+  backdrop-filter:var(--glass-blur);
+  box-shadow:var(--shadow);
+}
+/* 噪点 */
+.glass::before {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0.5 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity:.5;
+  mix-blend-mode:overlay;
+}
+/* 顶部镜面高光 */
+.glass::after {
+  content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:var(--spec);
+}
+/* 渐变发丝描边 */
+.gborder { border:1px solid transparent; }
+.gborder::before {
+  content:''; position:absolute; inset:-1px; border-radius:inherit; padding:1px; pointer-events:none;
+  background:var(--gborder);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  mask:linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite:exclude;
+}
+.glass > * { position:relative; z-index:1; }
+
+/* 按压反馈 */
+.press { transition:transform .12s var(--ease), opacity .15s; cursor:pointer; }
+.press:active { transform:scale(.96); }
+
+/* ============ 新标签页 ============ */
+#newtab {
+  background:linear-gradient(180deg, var(--bg0) 0%, var(--bg1) 100%);
+  align-items:center; overflow-y:auto;
+}
+#newtab::-webkit-scrollbar { display:none; }
+.nt-inner { width:100%; display:flex; flex-direction:column; align-items:center; padding:38px 32px 30px; }
+.brand {
+  font-family:'Outfit'; color:#fff;
+  text-shadow:0 2px 24px rgba(91,127,255,.25);
+  height:88px; display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg,#5B7FFF,#8B5CFF,#FF5C7B);
+  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+}
+.brand .Y { font-size:54px; font-weight:200; letter-spacing:-4px; }
+.brand .rest { font-size:38px; font-weight:300; letter-spacing:4px; }
+/* 诗词区 */
+.poem-area { height:100px; display:flex; align-items:center; justify-content:center; position:relative; width:100%; }
+.poem-holder, .brand-holder { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; transition:opacity .5s var(--ease); }
+.poem-holder { opacity:0; }
+.poem-text {
+  font-family:'SourceHanSerifSC','Noto Serif SC','SimSun',serif;
+  font-size:17px; line-height:1.7; letter-spacing:1.5px; color:var(--ink);
+  text-align:center; max-width:100%;
+}
+.poem-author {
+  font-family:'SourceHanSerifSC','Noto Serif SC','SimSun',serif;
+  font-size:11.5px; letter-spacing:2px; color:var(--ink2);
+  text-align:center; margin-top:8px; opacity:0; transition:opacity .6s .2s;
+}
+.cursor { display:inline-block; animation:blink 1s step-end infinite; color:var(--ink2); }
+@keyframes blink { 50% { opacity:0; } }
+/* 搜索框 */
+.search-row { width:100%; max-width:480px; margin-top:26px; }
+.search {
+  border-radius:26px; height:50px; display:flex; align-items:center;
+  padding:0 6px 0 18px; gap:10px;
+}
+.search input {
+  flex:1; border:none; outline:none; background:transparent;
+  font-family:inherit; font-size:14px; color:var(--ink);
+}
+.search input::placeholder { color:var(--ink3); }
+.search .go {
+  width:38px; height:38px; border:none; border-radius:19px; cursor:pointer;
+  background:linear-gradient(135deg,#5B7FFF,#8B5CFF); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  transition:transform .12s var(--ease);
+}
+.search .go:active { transform:scale(.92); }
+/* 快捷链接 */
+.quick-section { margin-top:36px; width:100%; max-width:420px; }
+.quick-label { font-size:11px; letter-spacing:2px; color:var(--ink3); text-align:center; margin-bottom:16px; }
+.quick-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px 8px; }
+.quick-tile { display:flex; flex-direction:column; align-items:center; gap:7px; }
+.quick-avatar {
+  width:48px; height:48px; border-radius:16px; display:flex; align-items:center; justify-content:center;
+  color:#fff; font-size:19px; font-weight:500; font-family:'Outfit';
+  box-shadow:0 3px 10px rgba(0,0,0,.18); position:relative;
+}
+.quick-avatar .x {
+  position:absolute; top:-5px; right:-5px; width:18px; height:18px; border-radius:50%;
+  background:#E5484D; color:#fff; font-size:10px; display:none; align-items:center; justify-content:center;
+}
+.quick-tile:hover .x { display:flex; }
+.quick-name { font-size:11.5px; color:var(--ink2); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.quick-add { background:var(--surface-soft); border:1px solid var(--card-border); border-radius:16px; }
+.quick-add i { font-size:22px; color:var(--ink2); }
+
+/* ============ 页面（模拟网页） ============ */
+#page { background:#fff; }
+html[data-theme="dark"] #page { background:#111114; }
+.address-row { padding:8px 12px 4px; }
+.address {
+  border-radius:24px; height:44px; display:flex; align-items:center; padding:0 6px 0 14px; gap:8px;
+}
+.address .lock { font-size:14px; color:#34C759; width:18px; text-align:center; }
+.address input {
+  flex:1; border:none; outline:none; background:transparent;
+  font-family:inherit; font-size:13px; color:var(--ink);
+}
+.address button {
+  width:38px; height:38px; border:none; background:transparent; cursor:pointer;
+  color:var(--ink2); border-radius:19px; font-size:16px;
+}
+.progress { height:2px; margin:2px 12px 0; border-radius:2px; overflow:hidden; background:transparent; }
+.progress i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#5B7FFF,#8B5CFF); transition:width .3s; }
+.fake-page { flex:1; overflow-y:auto; padding:22px 20px; }
+.fake-page h2 { font-size:17px; margin-bottom:10px; color:var(--ink); font-weight:600; }
+.fake-page p { font-size:13px; line-height:1.8; color:var(--ink2); }
+.fake-page .sitebar { height:110px; border-radius:14px; margin-bottom:14px; display:flex; align-items:flex-end; padding:12px; font-size:13px; color:#fff; }
+.fake-page .sitebar small { opacity:.8; font-weight:300; }
+.card-blocks { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px; }
+.card-blocks div { height:64px; border-radius:12px; }
+
+/* ============ 底部栏 ============ */
+#bottombar {
+  position:absolute; left:0; right:0; bottom:0; z-index:20;
+  border-radius:0;
+}
+#bottombar .bar-inner {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  height:58px;
+}
+.navbtn {
+  width:40px; height:40px; border-radius:20px; border:none; background:transparent;
+  color:var(--ink); font-size:17px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.navbtn:disabled { color:var(--ink3); opacity:.35; }
+.ai-btn {
+  width:48px; height:48px; border-radius:24px; border:1px solid rgba(255,255,255,.25);
+  background:linear-gradient(135deg,#5B7FFF,#8B5CFF,#FF5C7B);
+  color:#fff; font-size:19px; cursor:pointer; position:relative;
+  box-shadow:0 4px 14px rgba(139,92,255,.22);
+}
+.ai-btn .dot {
+  position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%;
+  background:#34C759; box-shadow:0 0 4px #34C759;
+}
+.tabbtn {
+  width:40px; height:40px; border:none; background:transparent; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+}
+.tabbtn .frame {
+  width:24px; height:24px; border:1.5px solid var(--ink2); border-radius:6px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; color:var(--ink2);
+}
+
+/* ============ 底部面板（标签页/菜单） ============ */
+.sheet-mask {
+  position:absolute; inset:0; background:rgba(0,0,0,.35); z-index:30;
+  display:none; align-items:flex-end;
+}
+.sheet-mask.show { display:flex; animation:fadeIn .25s var(--ease); }
+.sheet {
+  width:100%; border-radius:28px 28px 0 0; padding:14px 12px 24px;
+  max-height:78%; overflow-y:auto;
+}
+.sheet-grab { width:40px; height:4px; border-radius:2px; background:var(--ink3); opacity:.4; margin:2px auto 12px; }
+.sheet-head { display:flex; justify-content:space-between; align-items:center; padding:4px 10px 12px; }
+.sheet-head h3 { font-size:16px; font-weight:600; letter-spacing:-.2px; }
+.sheet-head .actions { display:flex; gap:6px; }
+.chip {
+  font-family:inherit; font-size:12px; border:1px solid var(--card-border);
+  background:var(--surface-soft); color:var(--ink); border-radius:9px; padding:5px 10px; cursor:pointer;
+}
+/* 标签卡片 */
+.tabgrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:4px 6px; }
+.tabcard { border-radius:18px; padding:8px; display:flex; flex-direction:column; gap:6px; }
+.tabcard .thumb {
+  height:110px; border-radius:12px; background:var(--surface-soft);
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.tabcard.active { outline:1.5px solid #5B7FFF; outline-offset:-1px; }
+.tabcard .ttl { display:flex; align-items:center; gap:4px; font-size:12px; color:var(--ink); padding:2px 4px 4px; }
+.tabcard .ttl span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tabcard .ttl button { border:none; background:transparent; color:var(--ink2); cursor:pointer; font-size:12px; padding:4px; }
+/* 菜单 */
+.menu-stats {
+  margin:0 6px 14px; border-radius:10px; padding:8px 12px; font-size:12px;
+  background:var(--surface-soft); border:1px solid var(--card-border);
+  display:flex; justify-content:space-between; color:var(--ink2);
+}
+.menu-stats b { color:#5B7FFF; font-weight:600; }
+.menu-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px 8px; padding:0 6px; }
+.menu-item { display:flex; flex-direction:column; align-items:center; gap:6px; font-size:11px; color:var(--ink2); }
+.menu-item .ic {
+  width:52px; height:52px; border-radius:16px; display:flex; align-items:center; justify-content:center;
+  background:var(--surface-soft); border:1px solid var(--card-border);
+  color:#5B7FFF; font-size:22px;
+}
+
+/* ============ 书签 / 历史 / 设置 ============ */
+.screen-page { overflow-y:auto; }
+.screen-page .topbar { display:flex; align-items:center; gap:4px; padding:8px 10px 6px; position:sticky; top:0; z-index:5; background:transparent; }
+.screen-page .topbar button {
+  border:none; background:transparent; color:var(--ink); cursor:pointer;
+  width:38px; height:38px; border-radius:19px; font-size:17px;
+}
+.screen-page .topbar h2 { flex:1; text-align:center; font-size:17px; font-weight:600; letter-spacing:-.2px; }
+.screen-page .topbar .act { font-size:14px; }
+.list { padding:6px 16px 30px; display:flex; flex-direction:column; gap:10px; }
+.item {
+  border-radius:18px; padding:10px 12px; display:flex; align-items:center; gap:12px;
+}
+.item .av { width:40px; height:40px; border-radius:13px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:17px; font-weight:500; }
+.item .meta { flex:1; min-width:0; }
+.item .meta .t { font-size:14px; font-weight:500; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.item .meta .u { font-size:11.5px; color:var(--ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.item .meta .tm { font-size:11px; color:var(--ink3); margin-top:2px; }
+.item .del { border:none; background:transparent; color:var(--ink2); cursor:pointer; font-size:14px; padding:8px; }
+.empty { display:flex; flex-direction:column; align-items:center; gap:10px; padding:70px 0; color:var(--ink3); font-size:13px; }
+.empty .big { font-size:46px; opacity:.5; }
+/* 历史搜索 */
+.hsearch { margin:4px 16px 12px; border-radius:18px; height:40px; display:flex; align-items:center; padding:0 12px; gap:8px; }
+.hsearch input { flex:1; border:none; outline:none; background:transparent; font-family:inherit; font-size:13px; color:var(--ink); }
+/* 设置 */
+.setcard { border-radius:20px; padding:16px; }
+.setcard .h { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; margin-bottom:12px; }
+.setcard .h i { color:#5B7FFF; font-size:17px; }
+.setrow { display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:0.5px solid var(--card-border); font-size:14px; }
+.setrow:last-child { border-bottom:none; padding-bottom:2px; }
+.setrow .val { font-size:12.5px; color:var(--ink2); display:flex; align-items:center; gap:8px; }
+.switch { width:42px; height:24px; border-radius:12px; background:var(--surface-soft); border:1px solid var(--card-border); position:relative; cursor:pointer; transition:background .2s; }
+.switch::after { content:''; position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%; background:var(--ink2); transition:all .2s var(--ease); }
+.switch.on { background:linear-gradient(135deg,#5B7FFF,#8B5CFF); }
+.switch.on::after { left:20px; background:#fff; }
+
+/* 提示条 */
+.toast {
+  position:absolute; left:50%; bottom:74px; transform:translateX(-50%) translateY(10px);
+  background:var(--surface-strong); color:var(--ink); font-size:12.5px;
+  padding:10px 18px; border-radius:12px; z-index:60; opacity:0; pointer-events:none;
+  transition:all .25s var(--ease); white-space:nowrap; box-shadow:var(--shadow);
+  border:1px solid var(--card-border);
+}
+.toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+/* 颜色工具 */
+.c1{background:linear-gradient(135deg,#5B7FFF,#8B5CFF)} .c2{background:linear-gradient(135deg,#00B8A9,#00A3E0)}
+.c3{background:linear-gradient(135deg,#FF8E53,#FF5C7B)} .c4{background:linear-gradient(135deg,#7B61FF,#B05CFF)}
+.c5{background:linear-gradient(135deg,#2E9EFF,#00C6A7)} .c6{background:linear-gradient(135deg,#F95C7B,#F7A35C)}
+
+/* 桌面模式调整 */
+#device.desktop .quick-grid { grid-template-columns:repeat(6,1fr); }
+#device.desktop .brand .Y { font-size:62px; }
+#device.desktop .brand .rest { font-size:44px; }
+#device.desktop .nt-inner { padding-top:56px; }
+#device.desktop .tabgrid { grid-template-columns:repeat(4,1fr); }
+#device.desktop .menu-grid { grid-template-columns:repeat(8,1fr); }
+#device.desktop .screen { inset:30px 0 0; }
+</style>
+</head>
+<body>
+<h1 class="page-title">Yanler UI 交互预览</h1>
+<p class="page-sub">手机/桌面切换 · 深浅主题 · 所有按钮可点 · 字体走项目真实文件</p>
+
+<div class="toolbar">
+  <button id="btn-phone" class="active">手机 390×800</button>
+  <button id="btn-desktop">桌面 960×640</button>
+  <button id="btn-theme">切换深色/浅色</button>
+  <button id="btn-reset">重置数据</button>
+</div>
+
+<div class="stage">
+<div id="device">
+  <div class="statusbar"><span>9:41</span><span>Yanler</span><span>5G ▮▮▮</span></div>
+
+  <!-- 新标签页 -->
+  <div class="screen active" id="newtab">
+    <div class="nt-inner">
+      <div class="poem-area">
+        <div class="brand-holder" id="brandHolder">
+          <div class="brand"><span class="Y">Y</span><span class="rest">anler</span></div>
+        </div>
+        <div class="poem-holder" id="poemHolder">
+          <div>
+            <div class="poem-text" id="poemText"></div>
+            <div class="poem-author" id="poemAuthor"></div>
+          </div>
+        </div>
+      </div>
+      <div class="search-row">
+        <div class="glass gborder search">
+          <span style="color:var(--ink2);font-size:16px">⌕</span>
+          <input id="searchInput" placeholder="搜索或输入网址" />
+          <button class="go" onclick="doSearch()">→</button>
+        </div>
+      </div>
+      <div class="quick-section">
+        <div class="quick-label">快 捷 链 接</div>
+        <div class="quick-grid" id="quickGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 模拟网页 -->
+  <div class="screen" id="page">
+    <div class="address-row">
+      <div class="glass gborder address">
+        <span class="lock">🔒</span>
+        <input id="addressInput" value="https://example.com" />
+        <button id="addrAction" onclick="toggleReload()">⟳</button>
+      </div>
+      <div class="progress"><i id="progressBar"></i></div>
+    </div>
+    <div class="fake-page" id="fakePage"></div>
+  </div>
+
+  <!-- 书签 -->
+  <div class="screen screen-page" id="bookmarks">
+    <div class="topbar">
+      <button onclick="goBack()">‹</button><h2>书签</h2>
+      <button class="act" onclick="clearBookmarks()">🗑</button>
+    </div>
+    <div class="list" id="bookmarkList"></div>
+  </div>
+
+  <!-- 历史 -->
+  <div class="screen screen-page" id="history">
+    <div class="topbar">
+      <button onclick="goBack()">‹</button><h2>历史记录</h2>
+      <button class="act" onclick="clearHistory()">🗑</button>
+    </div>
+    <div class="glass gborder hsearch">
+      <span style="color:var(--ink2);font-size:15px">⌕</span>
+      <input id="historySearch" placeholder="搜索历史" oninput="renderHistory()" />
+    </div>
+    <div class="list" id="historyList" style="flex:1;overflow-y:auto;"></div>
+  </div>
+
+  <!-- 设置 -->
+  <div class="screen screen-page" id="settings">
+    <div class="topbar">
+      <button onclick="goBack()">‹</button><h2>设置</h2><button style="visibility:hidden">·</button>
+    </div>
+    <div class="list">
+      <div class="glass gborder setcard">
+        <div class="h"><i>⌕</i>搜索</div>
+        <div class="setrow"><span>默认搜索引擎</span><span class="val" id="engineVal">Bing</span></div>
+        <div class="setrow"><span>首页</span><span class="val">新标签页</span></div>
+      </div>
+      <div class="glass gborder setcard">
+        <div class="h"><i>🛡</i>隐私与安全</div>
+        <div class="setrow"><span>广告过滤</span><span class="switch on" data-on="1" onclick="toggleSw(this,'广告过滤')"></span></div>
+        <div class="setrow"><span>禁止追踪 (DNT)</span><span class="switch on" data-on="1" onclick="toggleSw(this,'禁止追踪')"></span></div>
+        <div class="setrow"><span>拦截第三方 Cookie</span><span class="switch on" data-on="1" onclick="toggleSw(this,'Cookie 拦截')"></span></div>
+      </div>
+      <div class="glass gborder setcard">
+        <div class="h"><i>🎨</i>外观</div>
+        <div class="setrow"><span>深色模式</span><span class="switch" data-on="0" onclick="toggleThemeFromSwitch(this)"></span></div>
+      </div>
+      <div class="glass gborder setcard">
+        <div class="h"><i>✦</i>AI 助手</div>
+        <div class="setrow"><span>API 状态</span><span class="val" style="color:#34C759">已配置</span></div>
+        <div class="setrow"><span>代理模式</span><span class="switch" data-on="0" onclick="toggleSw(this,'代理模式')"></span></div>
+      </div>
+      <div class="glass gborder setcard">
+        <div class="h"><i>▤</i>数据管理</div>
+        <div class="setrow"><span>书签</span><span class="val" id="dataBm">3 个</span></div>
+        <div class="setrow"><span>历史记录</span><span class="val" id="dataHs">5 条</span></div>
+        <div class="setrow" style="color:#E5484D" onclick="clearAllData()"><span>清除所有数据</span><span>›</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 底部栏 -->
+  <div class="glass gborder" id="bottombar">
+    <div class="bar-inner">
+      <button class="navbtn press" id="btnBack" disabled onclick="goBack()">‹</button>
+      <button class="navbtn press" id="btnFwd" disabled onclick="goForward()">›</button>
+      <div style="flex:1"></div>
+      <button class="ai-btn press" onclick="toggleAI()">✦<span class="dot"></span></button>
+      <div style="flex:1"></div>
+      <button class="tabbtn press" onclick="openSheet('tabs')"><span class="frame" id="tabCount">1</span></button>
+      <button class="navbtn press" onclick="openSheet('menu')">⋯</button>
+    </div>
+  </div>
+
+  <!-- 标签页面板 -->
+  <div class="sheet-mask" id="tabsMask" onclick="if(event.target===this)closeSheet()">
+    <div class="glass gborder sheet">
+      <div class="sheet-grab"></div>
+      <div class="sheet-head">
+        <h3>标签页 (<span id="tabsCount">1</span>)</h3>
+        <div class="actions">
+          <button class="chip" onclick="addTab()">＋ 新建</button>
+          <button class="chip" onclick="closeAllTabs()">全部关闭</button>
+        </div>
+      </div>
+      <div class="tabgrid" id="tabGrid"></div>
+    </div>
+  </div>
+
+  <!-- 菜单面板 -->
+  <div class="sheet-mask" id="menuMask" onclick="if(event.target===this)closeSheet()">
+    <div class="glass gborder sheet">
+      <div class="sheet-grab"></div>
+      <div class="menu-stats"><span>🛡 广告拦截</span><b>已拦截 128 个</b></div>
+      <div class="menu-grid">
+        <div class="menu-item press" onclick="toggleTheme()"><span class="ic" id="menuThemeIc">☀</span>深色</div>
+        <div class="menu-item press" onclick="showScreen('settings')"><span class="ic">⚙</span>设置</div>
+        <div class="menu-item press" onclick="toast('无痕模式已开启')"><span class="ic">🕶</span>无痕</div>
+        <div class="menu-item press" onclick="toggleAI()"><span class="ic">✦</span>AI</div>
+        <div class="menu-item press" onclick="showScreen('bookmarks')"><span class="ic">🔖</span>书签</div>
+        <div class="menu-item press" onclick="showScreen('history')"><span class="ic">🕘</span>历史</div>
+        <div class="menu-item press" onclick="addBookmark()"><span class="ic">＋</span>收藏此页</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const POEMS = [
+  ['人生若只如初见，何事秋风悲画扇','纳兰性德','木兰花·拟古决绝词柬友'],
+  ['众里寻他千百度，蓦然回首，那人却在，灯火阑珊处','辛弃疾','青玉案·元夕'],
+  ['但愿人长久，千里共婵娟','苏轼','水调歌头'],
+  ['床前明月光，疑是地上霜。举头望明月，低头思故乡','李白','静夜思'],
+  ['行到水穷处，坐看云起时','王维','终南别业'],
+  ['落霞与孤鹜齐飞，秋水共长天一色','王勃','滕王阁序'],
+  ['大鹏一日同风起，扶摇直上九万里','李白','上李邕'],
+  ['春风得意马蹄疾，一日看尽长安花','孟郊','登科后'],
+  ['醉后不知天在水，满船清梦压星河','唐珙','题龙阳县青草湖'],
+  ['人生自是有情痴，此恨不关风与月','欧阳修','玉楼春'],
+  ['我见青山多妩媚，料青山见我应如是','辛弃疾','贺新郎'],
+  ['桃李春风一杯酒，江湖夜雨十年灯','黄庭坚','寄黄几复'],
+];
+const QUICK_DEFAULTS = [
+  ['哔哩哔哩','https://www.bilibili.com',1], ['知乎','https://www.zhihu.com',2],
+  ['百度','https://www.baidu.com',3], ['GitHub','https://github.com',4],
+  ['博客','https://blog.260607.best',5], ['微博','https://weibo.com',6],
+];
+const SAMPLE_BOOKMARKS = [
+  ['知乎 - 有问题，就会有答案','https://www.zhihu.com'],
+  ['GitHub','https://github.com'],
+  ['哔哩哔哩 (゜-゜)つロ 干杯~','https://www.bilibili.com'],
+];
+const SAMPLE_HISTORY = [
+  ['哔哩哔哩 (゜-゜)つロ 干杯~','https://www.bilibili.com/video/BV1GJ411x7h7', 2],
+  ['知乎 - 有问题，就会有答案','https://www.zhihu.com/question/299538341', 45],
+  ['GitHub','https://github.com/qiqi1200/search', 130],
+  ['百度一下，你就知道','https://www.baidu.com', 300],
+  ['Flutter 官方文档','https://docs.flutter.dev', 1500],
+  ['Yanler 博客','https://blog.260607.best', 2900],
+];
+const LS = {
+  quick:'yanler_preview_quick', bm:'yanler_preview_bm', hs:'yanler_preview_hs',
+};
+
+let quick = load(LS.quick, QUICK_DEFAULTS.map(q=>({title:q[0],url:q[1],c:q[2]})));
+let bookmarks = load(LS.bm, SAMPLE_BOOKMARKS.map(b=>({title:b[0],url:b[1]})));
+let history = load(LS.hs, SAMPLE_HISTORY.map(h=>({title:h[0],url:h[1],min:h[2]})));
+function load(k, def){ try{ const v=JSON.parse(localStorage.getItem(k)); return v||def; }catch(e){ return def; } }
+function save(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+
+/* ================= 全局状态 ================= */
+let current = 'newtab';       // newtab | page | bookmarks | history | settings
+let theme = 'light';
+let isDesktop = false;
+let tabs = [{id:1, title:'新标签页', url:'', active:true}];
+let activeTab = 0;
+let poemIdx = 0, charIdx = 0, phase = 'brand';
+let loadTimer = null;
+
+const $ = id => document.getElementById(id);
+
+/* ================= 打字机（与 App 同节奏：logo 4s → 打字 60ms/字 → 停留） ================= */
+function startTypewriter() {
+  poemIdx = (poemIdx + 1) % POEMS.length;
+  charIdx = 0;
+  const [text, author, title] = POEMS[poemIdx];
+  $('brandHolder').style.opacity = 0;
+  $('poemHolder').style.opacity = 1;
+  phase = 'typing';
+  const tick = setInterval(() => {
+    if (phase !== 'typing') { clearInterval(tick); return; }
+    charIdx++;
+    $('poemText').textContent = text.slice(0, charIdx) + (charIdx < text.length ? '<span class="cursor">▊</span>' : '');
+    if (charIdx >= text.length) {
+      clearInterval(tick);
+      $('poemAuthor').textContent = `—— ${author} 《${title}》`;
+      $('poemAuthor').style.opacity = 1;
+      setTimeout(backToBrand, 2000);
+    }
+  }, 60);
+}
+function backToBrand() {
+  phase = 'brand';
+  $('brandHolder').style.opacity = 1;
+  $('poemHolder').style.opacity = 0;
+  $('poemAuthor').style.opacity = 0;
+  $('poemText').textContent = '';
+  setTimeout(startTypewriter, 4000);
+}
+setTimeout(startTypewriter, 4000);
+
+/* ================= 快捷链接 ================= */
+function renderQuick() {
+  const g = $('quickGrid'); g.innerHTML = '';
+  quick.forEach((q, i) => {
+    const t = document.createElement('div');
+    t.className = 'quick-tile press';
+    t.innerHTML = `<div class="quick-avatar c${q.c}"><span>${q.title[0].toUpperCase()}</span><span class="x" title="移除">✕</span></div>
+      <div class="quick-name">${q.title}</div>`;
+    t.onclick = () => openUrl(q.title, q.url);
+    t.oncontextmenu = e => { e.preventDefault(); removeQuick(i); };
+    t.querySelector('.x').onclick = e => { e.stopPropagation(); removeQuick(i); };
+    g.appendChild(t);
+  });
+  const add = document.createElement('div');
+  add.className = 'quick-tile press';
+  add.innerHTML = `<div class="quick-avatar quick-add">＋</div><div class="quick-name">添加</div>`;
+  add.onclick = addQuick;
+  g.appendChild(add);
+}
+function removeQuick(i) {
+  if (!confirm(`移除「${quick[i].title}」？`)) return;
+  quick.splice(i, 1); save(LS.quick, quick); renderQuick();
+}
+function addQuick() {
+  const title = prompt('名称：'); if (!title) return;
+  const url = prompt('网址（如 example.com）：'); if (!url) return;
+  quick.push({title, url: url.includes('.') ? 'https://'+url : url, c: (quick.length % 6) + 1});
+  save(LS.quick, quick); renderQuick(); toast('已添加快捷链接');
+}
+
+/* ================= 页面导航（模拟网页） ================= */
+function openUrl(title, url) {
+  tabs[activeTab] = { ...tabs[activeTab], title, url };
+  renderTabs();
+  $('addressInput').value = url;
+  $('fakePage').innerHTML = `
+    <div class="sitebar c${Math.floor(Math.random()*6)+1}"><div><h2>${title}</h2><small>${url}</small></div></div>
+    <p>这是「${title}」的模拟页面 —— 在真实 App 中此处为 WebView 内容。液态玻璃在平台视图上方的退化效果，可以通过地址栏与底部栏观察。</p>
+    <div class="card-blocks"><div class="c2"></div><div class="c3"></div><div class="c4"></div></div>
+    <p style="margin-top:16px">地址栏支持：输入新地址后回车 / 点击刷新按钮，进度条会模拟加载动画。后退按钮在加载完成后可用，可回到新标签页。</p>`;
+  showScreen('page');
+  simulateLoad();
+}
+function simulateLoad() {
+  $('btnBack').disabled = false; $('btnFwd').disabled = false;
+  let p = 0; const bar = $('progressBar');
+  clearInterval(loadTimer);
+  loadTimer = setInterval(() => {
+    p += Math.random() * 0.22 + 0.06;
+    if (p >= 1) { p = 1; clearInterval(loadTimer); $('addrAction').textContent = '⟳'; }
+    bar.style.width = (p * 100) + '%';
+  }, 150);
+}
+function toggleReload() {
+  const btn = $('addrAction');
+  if (btn.textContent === '✕') { btn.textContent = '⟳'; $('progressBar').style.width = '0%'; }
+  else { btn.textContent = '✕'; simulateLoad(); }
+}
+$('addressInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { openUrl($('addressInput').value, $('addressInput').value); }
+});
+function doSearch() {
+  const q = $('searchInput').value.trim();
+  if (!q) return;
+  openUrl(`搜索：${q}`, `https://www.bing.com/search?q=${encodeURIComponent(q)}`);
+}
+
+/* ================= 底部栏 / 面板 ================= */
+function goBack() {
+  if (current === 'page') { showScreen('newtab'); $('btnBack').disabled = true; return; }
+  showScreen('newtab');
+}
+function goForward() { toast('没有可前进的页面'); }
+function toggleAI() { toast('AI 代理模式已开启 ✦'); }
+function openSheet(id) { $(id + 'Mask').classList.add('show'); }
+function closeSheet() { document.querySelectorAll('.sheet-mask').forEach(m => m.classList.remove('show')); }
+function showScreen(name) {
+  closeSheet();
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $(name).classList.add('active', 'fade-in');
+  current = name;
+  if (name === 'bookmarks') renderBookmarks();
+  if (name === 'history') { $('historySearch').value=''; renderHistory(); }
+  if (name === 'settings') renderSettingsData();
+}
+
+/* ================= 标签页 ================= */
+function renderTabs() {
+  $('tabCount').textContent = tabs.length;
+  $('tabsCount').textContent = tabs.length;
+  const g = $('tabGrid'); g.innerHTML = '';
+  tabs.forEach((t, i) => {
+    const host = t.url ? t.url.replace(/^https?:\/\//,'').split('/')[0] : '';
+    const letter = (host || t.title || '?')[0].toUpperCase();
+    const card = document.createElement('div');
+    card.className = 'tabcard glass gborder' + (t.active ? ' active' : '');
+    card.innerHTML = `<div class="thumb"><div class="quick-avatar c${(i%6)+1}">${letter}</div></div>
+      <div class="ttl"><span>${t.title}</span><button onclick="event.stopPropagation();closeTab(${i})">✕</button></div>`;
+    card.onclick = () => { activateTab(i); closeSheet(); };
+    g.appendChild(card);
+  });
+}
+function addTab() {
+  tabs.push({id: Date.now(), title:'新标签页', url:'', active:false});
+  activateTab(tabs.length - 1); renderTabs(); closeSheet(); showScreen('newtab');
+}
+function activateTab(i) {
+  tabs.forEach((t,idx)=>t.active = idx===i);
+  activeTab = i;
+  renderTabs();
+  if (tabs[i].url) showScreen('page'); else showScreen('newtab');
+}
+function closeTab(i) {
+  const wasActive = tabs[i] && tabs[i].active;
+  tabs.splice(i, 1);
+  if (!tabs.length) tabs.push({id:1,title:'新标签页',url:'',active:true});
+  if (wasActive) {
+    activeTab = Math.min(i, tabs.length - 1);
+    tabs.forEach((t, idx) => t.active = idx === activeTab);
+  }
+  renderTabs();
+}
+function closeAllTabs() {
+  if (!confirm('关闭全部标签页？')) return;
+  tabs = [{id:1,title:'新标签页',url:'',active:true}]; activeTab = 0; renderTabs(); closeSheet(); showScreen('newtab');
+}
+
+/* ================= 书签 ================= */
+function renderBookmarks() {
+  const l = $('bookmarkList');
+  l.innerHTML = '';
+  if (!bookmarks.length) {
+    l.innerHTML = `<div class="empty"><span class="big">🔖</span>还没有书签<br><small>在浏览网页时从菜单收藏即可</small></div>`;
+    return;
+  }
+  bookmarks.forEach((b, i) => {
+    const it = document.createElement('div');
+    it.className = 'item glass gborder press';
+    const host = b.url.replace(/^https?:\/\//,'').split('/')[0];
+    it.innerHTML = `<div class="av c${(i%6)+1}">${(host||b.title||'?')[0].toUpperCase()}</div>
+      <div class="meta"><div class="t">${b.title}</div><div class="u">${b.url}</div></div>
+      <button class="del" onclick="delBookmark(${i})">✕</button>`;
+    it.onclick = () => openUrl(b.title, b.url);
+    l.appendChild(it);
+  });
+  $('dataBm').textContent = bookmarks.length + ' 个';
+}
+function delBookmark(i) { bookmarks.splice(i,1); save(LS.bm, bookmarks); renderBookmarks(); }
+function clearBookmarks() { if (confirm('清空全部书签？')) { bookmarks=[]; save(LS.bm, bookmarks); renderBookmarks(); } }
+function addBookmark() {
+  const t = tabs[activeTab];
+  if (!t.url) { toast('当前页不在浏览状态'); return; }
+  bookmarks.unshift({title:t.title, url:t.url}); save(LS.bm, bookmarks);
+  closeSheet(); toast('已收藏到书签');
+}
+
+/* ================= 历史 ================= */
+function relTime(min) {
+  if (min < 1) return '刚刚';
+  if (min < 60) return min + ' 分钟前';
+  if (min < 1440) return Math.floor(min/60) + ' 小时前';
+  if (min < 10080) return Math.floor(min/1440) + ' 天前';
+  const d = new Date(); d.setMinutes(d.getMinutes()-min);
+  return (d.getMonth()+1) + '月' + d.getDate() + '日';
+}
+function renderHistory() {
+  const q = ($('historySearch').value || '').toLowerCase();
+  const list = history.filter(h => !q || h.title.toLowerCase().includes(q) || h.url.toLowerCase().includes(q));
+  const l = $('historyList'); l.innerHTML = '';
+  if (!list.length) {
+    l.innerHTML = `<div class="empty"><span class="big">🕘</span>${q?'没有匹配的结果':'暂无历史记录'}</div>`;
+    return;
+  }
+  list.forEach((h, i) => {
+    const orig = history.indexOf(h);
+    const it = document.createElement('div');
+    it.className = 'item glass gborder press';
+    const host = h.url.replace(/^https?:\/\//,'').split('/')[0];
+    it.innerHTML = `<div class="av c${(orig%6)+1}">${(host||h.title||'?')[0].toUpperCase()}</div>
+      <div class="meta"><div class="t">${h.title}</div><div class="u">${h.url}</div><div class="tm">${relTime(h.min)}</div></div>
+      <button class="del" onclick="delHistory(${orig})">✕</button>`;
+    it.onclick = () => openUrl(h.title, h.url);
+    l.appendChild(it);
+  });
+  $('dataHs').textContent = history.length + ' 条';
+}
+function delHistory(i) { history.splice(i,1); save(LS.hs, history); renderHistory(); }
+function clearHistory() { if (confirm('清空全部历史？')) { history=[]; save(LS.hs, history); renderHistory(); } }
+function clearAllData() {
+  if (!confirm('清除所有浏览数据（历史/书签/快捷链接）？')) return;
+  bookmarks=[]; history=[]; quick=[]; save(LS.bm,bookmarks); save(LS.hs,history); save(LS.quick,quick);
+  renderQuick(); renderBookmarks(); renderHistory(); renderSettingsData(); toast('数据已清除');
+}
+
+/* ================= 设置 / 主题 ================= */
+function renderSettingsData() {
+  $('dataBm').textContent = bookmarks.length + ' 个';
+  $('dataHs').textContent = history.length + ' 条';
+}
+function toggleSw(el, name) {
+  el.classList.toggle('on');
+  const on = el.classList.contains('on');
+  el.dataset.on = on ? '1' : '0';
+  toast((name||'选项') + (on ? ' 已开启' : ' 已关闭'));
+}
+function toggleThemeFromSwitch(el) {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  toggleTheme(!isDark);
+  el.classList.toggle('on', !isDark);
+  el.dataset.on = !isDark ? '1' : '0';
+}
+function toggleTheme(force) {
+  theme = force !== undefined ? (force ? 'dark' : 'light') : (theme === 'light' ? 'dark' : 'light');
+  document.documentElement.dataset.theme = theme;
+  // 菜单第一项：主题图标 + 文案
+  const item = document.querySelectorAll('.menu-item')[0];
+  item.querySelector('.ic').textContent = theme === 'light' ? '☀' : '☾';
+  item.childNodes[1].textContent = theme === 'light' ? '深色' : '浅色';
+  // 外观卡片里的深色模式开关同步
+  document.querySelectorAll('.setcard .switch').forEach(sw => {
+    const label = sw.closest('.setcard').querySelector('.setrow span').textContent;
+    if (label === '深色模式') {
+      const on = theme === 'dark';
+      sw.classList.toggle('on', on);
+      sw.dataset.on = on ? '1' : '0';
+    }
+  });
+}
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+/* ================= 设备切换 / 重置 ================= */
+$('btn-phone').onclick = () => {
+  isDesktop = false; $('device').classList.remove('desktop');
+  $('btn-phone').classList.add('active'); $('btn-desktop').classList.remove('active');
+};
+$('btn-desktop').onclick = () => {
+  isDesktop = true; $('device').classList.add('desktop');
+  $('btn-desktop').classList.add('active'); $('btn-phone').classList.remove('active');
+};
+$('btn-theme').onclick = () => { toggleTheme(); toast(theme==='dark' ? '已切换深色' : '已切换浅色'); };
+$('btn-reset').onclick = () => {
+  if (!confirm('重置所有预览数据？')) return;
+  localStorage.removeItem(LS.quick); localStorage.removeItem(LS.bm); localStorage.removeItem(LS.hs);
+  location.reload();
+};
+
+/* ================= 初始化 ================= */
+renderQuick();
+renderTabs();
+renderSettingsData();
+</script>
+</body>
+</html>

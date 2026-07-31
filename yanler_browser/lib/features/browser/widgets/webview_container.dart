@@ -11,6 +11,9 @@ class WebViewContainer extends StatefulWidget {
   final Function(String) onUrlChanged;
   final Function(String) onTitleChanged;
   final Function(bool) onLoadingChanged;
+
+  /// 加载进度回调（0.0-1.0），用于地址栏进度条
+  final Function(double)? onProgressChanged;
   final Function(InAppWebViewController)? onControllerReady;
   final Function(bool canGoBack, bool canGoForward)? onNavigationStateChanged;
 
@@ -23,6 +26,7 @@ class WebViewContainer extends StatefulWidget {
     required this.onLoadingChanged,
     this.onControllerReady,
     this.onNavigationStateChanged,
+    this.onProgressChanged,
   });
 
   @override
@@ -75,9 +79,17 @@ class _WebViewContainerState extends State<WebViewContainer> {
       },
       onLoadStart: (controller, url) {
         widget.onLoadingChanged(true);
+        widget.onProgressChanged?.call(0.05);
+        if (url != null && url.toString().isNotEmpty) {
+          widget.onUrlChanged(url.toString());
+        }
+      },
+      onProgressChanged: (controller, progress) {
+        widget.onProgressChanged?.call(progress / 100.0);
       },
       onLoadStop: (controller, url) async {
         widget.onLoadingChanged(false);
+        widget.onProgressChanged?.call(1.0);
         if (url != null) {
           widget.onUrlChanged(url.toString());
         }
@@ -93,6 +105,7 @@ class _WebViewContainerState extends State<WebViewContainer> {
       },
       onReceivedError: (controller, request, error) {
         widget.onLoadingChanged(false);
+        widget.onProgressChanged?.call(1.0);
       },
     );
   }

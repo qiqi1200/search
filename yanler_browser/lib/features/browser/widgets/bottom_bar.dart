@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/liquid_glass.dart';
 
 /// 底部导航栏 — 标准浏览器布局，AI 居中
 ///
-/// 布局: ◀ ▶ [spacer] ✦ AI [spacer] ■ ≡
+/// 布局（保持不动）: ◀ ▶ [spacer] ✦ AI [spacer] ■ ≡
 /// AI 按钮在绝对 C 位，视觉突出
 class BottomBar extends StatelessWidget {
   final int tabCount;
@@ -37,73 +38,71 @@ class BottomBar extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Container(
-      padding: EdgeInsets.only(
-        left: 4,
-        right: 4,
-        top: 6,
-        bottom: MediaQuery.of(context).padding.bottom > 0 ? 4 : 8,
-      ),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E1E22) : const Color(0xFFFAFAF8),
-        border: Border(
-          top: BorderSide(
-            color: theme.colorScheme.outline.withValues(alpha: 0.25),
-          ),
+    return LiquidGlass(
+      borderRadius: BorderRadius.zero,
+      blur: 24,
+      opacity: isDark ? 0.6 : 0.62,
+      borderWidth: 0.8,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 4,
+          right: 4,
+          top: 6,
+          bottom: MediaQuery.of(context).padding.bottom > 0 ? 4 : 8,
         ),
-      ),
-      child: Row(
-        children: [
-          // 后退
-          _NavButton(
-            icon: Icons.arrow_back_ios_new,
-            enabled: canGoBack,
-            onTap: canGoBack ? onBack : null,
-            theme: theme,
-          ),
+        child: Row(
+          children: [
+            // 后退
+            _NavButton(
+              icon: Icons.arrow_back_ios_new_rounded,
+              enabled: canGoBack,
+              onTap: canGoBack ? onBack : null,
+              theme: theme,
+            ),
 
-          // 前进
-          _NavButton(
-            icon: Icons.arrow_forward_ios,
-            enabled: canGoForward,
-            onTap: canGoForward ? onForward : null,
-            theme: theme,
-          ),
+            // 前进
+            _NavButton(
+              icon: Icons.arrow_forward_ios_rounded,
+              enabled: canGoForward,
+              onTap: canGoForward ? onForward : null,
+              theme: theme,
+            ),
 
-          // 弹性空间将 AI 推向中心
-          const Spacer(),
+            // 弹性空间将 AI 推向中心
+            const Spacer(),
 
-          // AI — 绝对 C 位，视觉焦点
-          _AICenterButton(
-            onTap: onAI,
-            isDark: isDark,
-            theme: theme,
-          ),
+            // AI — 绝对 C 位，视觉焦点
+            _AICenterButton(
+              onTap: onAI,
+              isDark: isDark,
+              theme: theme,
+            ),
 
-          // 弹性空间将右侧内容推向右边
-          const Spacer(),
+            // 弹性空间将右侧内容推向右边
+            const Spacer(),
 
-          // 标签页按钮
-          _TabCountButton(
-            count: tabCount,
-            onTap: onTabSwitch,
-            theme: theme,
-          ),
+            // 标签页按钮
+            _TabCountButton(
+              count: tabCount,
+              onTap: onTabSwitch,
+              theme: theme,
+            ),
 
-          // 菜单
-          _NavButton(
-            icon: Icons.more_horiz,
-            enabled: true,
-            onTap: onMenu,
-            theme: theme,
-          ),
-        ],
+            // 菜单
+            _NavButton(
+              icon: Icons.more_horiz_rounded,
+              enabled: true,
+              onTap: onMenu,
+              theme: theme,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-/// 导航按钮（后退 / 前进 / 菜单）
+/// 导航按钮（后退 / 前进 / 菜单）— 带按压缩放反馈
 class _NavButton extends StatelessWidget {
   final IconData icon;
   final bool enabled;
@@ -166,10 +165,14 @@ class _AICenterButton extends StatelessWidget {
             ],
           ),
           borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.25),
+            width: 0.8,
+          ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF8B5CFF).withValues(alpha: 0.35),
-              blurRadius: 12,
+              color: const Color(0xFF8B5CFF).withValues(alpha: 0.22),
+              blurRadius: 14,
               offset: const Offset(0, 4),
             ),
           ],
@@ -178,8 +181,8 @@ class _AICenterButton extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             const Icon(
-              Icons.auto_awesome,
-              size: 22,
+              Icons.auto_awesome_rounded,
+              size: 21,
               color: Colors.white,
             ),
             // AI 在线指示点
@@ -234,7 +237,7 @@ class _TabCountButton extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
               width: 1.5,
             ),
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(6),
           ),
           child: Center(
             child: Text(
@@ -243,6 +246,7 @@ class _TabCountButton extends StatelessWidget {
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: theme.colorScheme.onSurfaceVariant,
+                fontFamily: 'Outfit',
               ),
             ),
           ),

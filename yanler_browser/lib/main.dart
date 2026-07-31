@@ -6,6 +6,7 @@ import 'features/browser/screens/browser_screen.dart';
 import 'providers/browser_provider.dart';
 import 'providers/settings_provider.dart';
 import 'providers/ai_provider.dart';
+import 'providers/quick_links_provider.dart';
 import 'features/adblock/adblock_engine.dart';
 import 'features/bookmarks/bookmark_service.dart';
 import 'features/history/history_service.dart';
@@ -29,9 +30,10 @@ void main() async {
         ChangeNotifierProvider(create: (_) => BrowserProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => AIProvider()),
-        Provider.value(value: adblockEngine),
-        Provider.value(value: bookmarkService),
-        Provider.value(value: historyService),
+        ChangeNotifierProvider(create: (_) => QuickLinksProvider()..initialize()),
+        ChangeNotifierProvider.value(value: adblockEngine),
+        ChangeNotifierProvider.value(value: bookmarkService),
+        ChangeNotifierProvider.value(value: historyService),
       ],
       child: const YanlerApp(),
     ),

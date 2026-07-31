@@ -49,3 +49,11 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# 本地工具链（SDK/JDK 压缩包、安装脚本产物）
+.toolchain/
+*.zip
+
+# Android 本地配置（含本机 SDK 路径）
+android/local.properties
+android/key.properties

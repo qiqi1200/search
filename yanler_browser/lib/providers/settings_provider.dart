@@ -56,6 +56,13 @@ class SettingsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setHomepage(String homepage) async {
+    _homepage = homepage.trim();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('homepage', _homepage);
+    notifyListeners();
+  }
+
   Future<void> setAdblockEnabled(bool value) async {
     _adblockEnabled = value;
     final prefs = await SharedPreferences.getInstance();

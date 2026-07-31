@@ -95,6 +95,12 @@ class HistoryService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> remove(String id) async {
+    _history.removeWhere((h) => h.id == id);
+    await _save();
+    notifyListeners();
+  }
+
   List<HistoryEntry> search(String query) {
     final q = query.toLowerCase();
     return _history

@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/ai_provider.dart';
 import '../../core/constants/search_engines.dart';
+import '../../core/widgets/liquid_glass.dart';
 import '../bookmarks/bookmark_service.dart';
+import '../bookmarks/bookmarks_screen.dart';
 import '../history/history_service.dart';
+import '../history/history_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -55,9 +58,41 @@ class _SearchSection extends StatelessWidget {
         _SettingsRow(
           label: '首页',
           value: settings.homepage.isEmpty ? '新标签页' : settings.homepage,
-          onTap: () {},
+          onTap: () => _showHomepageDialog(context, settings),
         ),
       ],
+    );
+  }
+
+  void _showHomepageDialog(BuildContext context, SettingsProvider settings) {
+    final controller = TextEditingController(text: settings.homepage);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('设置首页'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: '首页地址',
+            hintText: '留空 = 新标签页',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.url,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              settings.setHomepage(controller.text.trim());
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -327,13 +362,13 @@ class _DataSection extends StatelessWidget {
         _SettingsRow(
           label: '书签',
           value: '${bookmarks.count} 个',
-          onTap: () {},
+          onTap: () => _openListScreen(context, const BookmarksScreen()),
         ),
         const _Divider(),
         _SettingsRow(
           label: '历史记录',
           value: '${history.count} 条',
-          onTap: () {},
+          onTap: () => _openListScreen(context, const HistoryScreen()),
         ),
         const _Divider(),
         ListTile(
@@ -386,9 +421,15 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
+
+    return LiquidGlass(
+      borderRadius: BorderRadius.circular(20),
+      blur: 18,
+      opacity: isDark ? 0.5 : 0.6,
+      borderWidth: 1,
+      shadows: GlassTokens.softShadow(isDark),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -408,6 +449,18 @@ class _SettingsCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 打开书签/历史页，选中条目后回传 URL 并关闭设置页
+void _openListScreen(BuildContext context, Widget screen) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => screen),
+  ).then((url) {
+    if (url is String && url.isNotEmpty && context.mounted) {
+      Navigator.pop(context, url);
+    }
+  });
 }
 
 class _SettingsRow extends StatelessWidget {
