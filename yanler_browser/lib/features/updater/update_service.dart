@@ -37,9 +37,18 @@ class UpdateService {
 
   static const String _repo = 'qiqi1200/search';
   static const String _apiPath = 'https://api.github.com/repos/$_repo/releases/latest';
-  static const Duration _timeout = Duration(seconds: 12);
+  static const Duration _timeout = Duration(seconds: 8);
 
-  /// GitHub 加速镜像（多源竞速，哪个快用哪个）
+  /// 版本文件 CDN 源（国内可直达，无需翻墙）
+  static const List<String> _versionSources = [
+    // jsDelivr CDN（国内快速，主力源）
+    'https://cdn.jsdelivr.net/gh/qiqi1200/search@main/yanler_browser/version.json',
+    'https://fastly.jsdelivr.net/gh/qiqi1200/search@main/yanler_browser/version.json',
+    // GitHub raw（备用）
+    'https://raw.githubusercontent.com/qiqi1200/search/main/yanler_browser/version.json',
+  ];
+
+  /// GitHub 加速镜像（用于 APK 下载竞速）
   static const List<String> _mirrors = [
     'https://ghfast.top/',
     'https://gh-proxy.com/',
@@ -49,72 +58,103 @@ class UpdateService {
     'https://gh.llkk.cc/',
   ];
 
-  /// 依次尝试直连与各镜像，返回第一个成功响应；全部失败抛异常。
-  static Future<http.Response> _getWithMirror(Uri uri) async {
-    final urls = [
-      uri,
-      for (final m in _mirrors) Uri.parse('$m${uri.toString()}'),
-    ];
-    Object? lastErr;
-    for (final u in urls) {
-      try {
-        final resp = await http
-            .get(
-              u,
-              headers: {
-                'User-Agent': 'Yanler-Browser',
-                'Accept': 'application/vnd.github+json',
-              },
-            )
-            .timeout(_timeout);
-        if (resp.statusCode == 200) return resp;
-        lastErr = 'HTTP ${resp.statusCode}';
-      } catch (e) {
-        lastErr = e;
+  /// 并行竞速检测版本：同时请求所有源，第一个成功的胜出。
+  /// 国内用户通常 jsDelivr 200ms 内响应，无需等待 GitHub API 超时。
+  static Future<Map<String, dynamic>?> _fetchVersionInfo() async {
+    final completer = Completer<Map<String, dynamic>?>();
+    var pending = _versionSources.length + 1; // +1 for GitHub API
+
+    void onFinish(Map<String, dynamic>? result) {
+      if (!completer.isCompleted && result != null) {
+        completer.complete(result);
+      }
+      pending--;
+      if (pending <= 0 && !completer.isCompleted) {
+        completer.complete(null);
       }
     }
-    throw Exception(lastErr.toString());
+
+    // 源 1：version.json CDN 源（轻量、快速、国内可达）
+    for (final src in _versionSources) {
+      unawaited(() async {
+        try {
+          final resp = await http
+              .get(Uri.parse(src), headers: {'User-Agent': 'Yanler/1.4'})
+              .timeout(_timeout);
+          if (resp.statusCode == 200) {
+            final data = jsonDecode(resp.body) as Map<String, dynamic>;
+            if (data['version'] != null) {
+              onFinish(data);
+              return;
+            }
+          }
+          onFinish(null);
+        } catch (_) {
+          onFinish(null);
+        }
+      }());
+    }
+
+    // 源 2：GitHub Releases API（完整信息，但国内可能超时）
+    unawaited(() async {
+      try {
+        final resp = await http
+            .get(Uri.parse(_apiPath), headers: {
+              'User-Agent': 'Yanler/1.4',
+              'Accept': 'application/vnd.github+json',
+            })
+            .timeout(_timeout);
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          final tag = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
+          final assets = (data['assets'] as List? ?? []);
+          String? url;
+          for (final a in assets) {
+            final name = (a['name'] as String? ?? '').toLowerCase();
+            if (name.endsWith('.apk') &&
+                !name.contains('armv7a') &&
+                !name.contains('arm64') &&
+                !name.contains('x86_64')) {
+              url = a['browser_download_url'] as String?;
+              break;
+            }
+          }
+          if (tag.isNotEmpty && url != null) {
+            onFinish({
+              'version': tag,
+              'url': url,
+              'notes': (data['body'] as String? ?? '').trim(),
+            });
+            return;
+          }
+        }
+        onFinish(null);
+      } catch (_) {
+        onFinish(null);
+      }
+    }());
+
+    return completer.future;
   }
 
-  /// 检查最新 Release。返回 null 表示无更新或检查失败（error 区分原因）。
+  /// 检查最新版本。返回 null 表示无更新或检查失败。
   static Future<UpdateCheckResult> checkForUpdates() async {
     try {
       final pkg = await PackageInfo.fromPlatform();
       final current = pkg.version;
 
-      final resp = await _getWithMirror(Uri.parse(_apiPath));
+      final info = await _fetchVersionInfo();
+      if (info == null) {
+        return const UpdateCheckResult(error: '网络不可用，请稍后重试');
+      }
 
-      final data = jsonDecode(resp.body) as Map<String, dynamic>;
-      final tag = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
-      final assets = (data['assets'] as List? ?? []);
-      // 优先通用 APK（跳过 armv7a/arm64/x86_64 分发包）
-      bool isSplit(String name) =>
-          name.contains('armv7a') ||
-          name.contains('arm64') ||
-          name.contains('x86_64') ||
-          name.contains('windows');
-      String? url;
-      for (final a in assets) {
-        final name = (a['name'] as String? ?? '').toLowerCase();
-        if (name.endsWith('.apk') && !isSplit(name)) {
-          url = a['browser_download_url'] as String?;
-          break;
-        }
-      }
-      if (url == null) {
-        for (final a in assets) {
-          final name = (a['name'] as String? ?? '').toLowerCase();
-          if (name.endsWith('.apk')) {
-            url = a['browser_download_url'] as String?;
-            break;
-          }
-        }
-      }
-      if (tag.isEmpty || url == null) {
+      final tag = (info['version'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
+      final url = info['url'] as String? ?? '';
+      if (tag.isEmpty || url.isEmpty) {
         return const UpdateCheckResult(error: 'Release 中没有找到 APK 文件');
       }
 
-      final notes = (data['body'] as String? ?? '').trim();
+      final notes = (info['notes'] as String? ?? '').trim();
       return UpdateCheckResult(
         info: _isNewer(tag, current)
             ? UpdateInfo(version: tag, url: url, notes: notes)
@@ -198,28 +238,38 @@ class UpdateService {
 
     final winner = await completer.future;
 
-    // 清理所有 part 文件
-    for (final p in parts) {
-      try {
-        await File(p).delete();
-      } catch (_) {}
-    }
-
     if (winner == null) {
+      // 全部失败，清理所有 part 文件
+      for (final p in parts) {
+        try {
+          await File(p).delete();
+        } catch (_) {}
+      }
       final firstErr = errs.firstWhere((e) => e != null, orElse: () => '未知错误');
       return '下载失败：$firstErr';
     }
 
-    // 把胜出的 part 改名为最终文件
+    // 把胜出的 part 改名为最终文件（先重命名，再清理其余 part）
     final winIdx = sources.indexOf(winner);
     final winPart = File(parts[winIdx]);
     try {
       if (await winPart.exists()) {
+        if (await file.exists()) await file.delete();
         await winPart.rename(file.path);
       }
     } catch (_) {
-      await winPart.copy(file.path);
-      await winPart.delete();
+      try {
+        await winPart.copy(file.path);
+        await winPart.delete();
+      } catch (_) {}
+    }
+
+    // 清理其余 part 文件（跳过已重命名的胜出文件）
+    for (var i = 0; i < parts.length; i++) {
+      if (i == winIdx) continue;
+      try {
+        await File(parts[i]).delete();
+      } catch (_) {}
     }
 
     // 调起系统安装器（open_filex 内部处理 FileProvider）

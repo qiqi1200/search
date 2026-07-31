@@ -126,6 +126,34 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: false
 
+      # 自动更新 version.json → 推送到 main → jsDelivr CDN 刷新
+      # 应用内更新通过 CDN 读取此文件检测新版本（国内无需翻墙）
+      - name: Update version.json for in-app update
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          APK_URL="https://github.com/qiqi1200/search/releases/download/${TAG}/Yanler-${VER}.apk"
+          cat > version.json << EOF
+          {
+            "version": "${VER}",
+            "build": $(grep -oP 'version:.*\+\K[0-9]+' pubspec.yaml || echo "1"),
+            "url": "${APK_URL}",
+            "notes": "Yanler ${TAG} 自动发布"
+          }
+          EOF
+          echo "✅ version.json updated to ${VER}"
+
+      - name: Commit version.json to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git checkout ${{ github.sha }} -- version.json
+          git add version.json
+          git diff --cached --quiet && echo "No changes" || git commit -m "chore: auto-update version.json to ${{ steps.ver.outputs.ver }}"
+          git push origin main || true
+
   # 可选：Windows 构建发布
   build_windows:
     name: Build & Upload Windows
