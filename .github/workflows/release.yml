@@ -38,7 +38,8 @@ jobs:
       - name: Sync version from tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VER="${{ github.event.inputs.version }}"
+            RAW="${{ github.event.inputs.version }}"
+            VER="${RAW#v}"
           else
             TAG="${GITHUB_REF_NAME}"
             VER="${TAG#v}"
@@ -81,12 +82,13 @@ jobs:
         id: ver
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            INPUT="${{ github.event.inputs.version }}"
+            RAW="${{ github.event.inputs.version }}"
+            VER="${RAW#v}"
             git config user.name "github-actions"
             git config user.email "github-actions@users.noreply.github.com"
-            git tag "v$INPUT"
-            git push origin "v$INPUT"
-            TAG="v$INPUT"
+            git tag "v$VER" 2>/dev/null || true
+            git push origin "v$VER" 2>/dev/null || true
+            TAG="v$VER"
           else
             TAG="${GITHUB_REF_NAME}"
           fi
