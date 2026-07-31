@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "build": 6,
-  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.0/Yanler-1.4.0.apk",
-  "notes": "v1.4.0 更新内容：\n- 聚合搜索（Bing/百度/搜狗/DuckDuckGo 并发）\n- 洁净浏览模式（阅读页自动去广告/弹窗）\n- 漫画无缝续读（滚到底自动跳下一章）\n- 前进/后退修复、搜索卡顿修复\n- 广告拦截规则扩充\n- 下载加速（6镜像竞速）"
+  "version": "1.4.1",
+  "build": 7,
+  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.1/Yanler-1.4.1.apk",
+  "notes": "v1.4.1 更新内容：\n- 修复广告拦截误杀CSS/字体导致网站样式丢失\n- 修复前进/后退按钮状态延迟\n- 优化UI卡顿（精确监听替代全量watch）\n- 按钮高光/水波纹效果\n- 应用图标圆角（自适应图标）\n- 聚合搜索添加Bing回退"
 }
