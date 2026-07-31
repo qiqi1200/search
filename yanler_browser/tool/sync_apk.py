@@ -107,14 +107,18 @@ def main() -> int:
 
     tag = (data.get("tag_name") or "").lstrip("v")
     assets = data.get("assets") or []
-    url = next(
-        (
-            a.get("browser_download_url")
-            for a in assets
-            if (a.get("name") or "").lower().endswith(".apk")
-        ),
-        None,
-    )
+    def _is_split(name: str) -> bool:
+        return any(k in name for k in ("armv7a", "arm64", "x86_64", "windows"))
+
+    # 优先通用包（跳过 armv7a/arm64/x86_64 分发包），避免下载到 split APK
+    apks = [a for a in assets if (a.get("name") or "").lower().endswith(".apk")]
+    url = None
+    for a in apks:
+        if not _is_split((a.get("name") or "").lower()):
+            url = a.get("browser_download_url")
+            break
+    if url is None and apks:
+        url = apks[0].get("browser_download_url")
     if not tag or not url:
         log("最新 Release 中没有 APK，跳过", notify=False)
         return 0

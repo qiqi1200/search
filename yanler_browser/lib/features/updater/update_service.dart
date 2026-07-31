@@ -59,12 +59,27 @@ class UpdateService {
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final tag = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
       final assets = (data['assets'] as List? ?? []);
+      // 优先通用 APK（跳过 armv7a/arm64/x86_64 分发包）
+      bool isSplit(String name) =>
+          name.contains('armv7a') ||
+          name.contains('arm64') ||
+          name.contains('x86_64') ||
+          name.contains('windows');
       String? url;
       for (final a in assets) {
         final name = (a['name'] as String? ?? '').toLowerCase();
-        if (name.endsWith('.apk')) {
+        if (name.endsWith('.apk') && !isSplit(name)) {
           url = a['browser_download_url'] as String?;
           break;
+        }
+      }
+      if (url == null) {
+        for (final a in assets) {
+          final name = (a['name'] as String? ?? '').toLowerCase();
+          if (name.endsWith('.apk')) {
+            url = a['browser_download_url'] as String?;
+            break;
+          }
         }
       }
       if (tag.isEmpty || url == null) {
