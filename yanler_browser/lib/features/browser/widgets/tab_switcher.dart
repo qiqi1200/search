@@ -15,12 +15,14 @@ class TabSwitcherSheet extends StatelessWidget {
 
     return LiquidGlass(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      blur: 26,
-      opacity: isDark ? 0.6 : 0.55,
+      blur: 30,
+      opacity: isDark ? 0.4 : 0.36,
       borderWidth: 1,
-      child: SizedBox(
-        height: height,
-        child: Consumer<BrowserProvider>(
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: height,
+          child: Consumer<BrowserProvider>(
           builder: (context, browser, _) {
             return Column(
               children: [
@@ -130,6 +132,7 @@ class TabSwitcherSheet extends StatelessWidget {
             );
           },
         ),
+        ),
       ),
     );
   }
@@ -213,6 +216,13 @@ class _TabCard extends StatelessWidget {
                         padding: EdgeInsets.zero,
                         color: theme.colorScheme.onSurfaceVariant,
                         onPressed: onClose,
+                        style: IconButton.styleFrom(
+                          backgroundColor: theme.colorScheme.surfaceContainerHigh
+                              .withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
                       ),
                     ),
                   ],

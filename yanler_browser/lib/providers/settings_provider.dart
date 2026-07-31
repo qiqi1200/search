@@ -11,6 +11,7 @@ class SettingsProvider extends ChangeNotifier {
   String _homepage = '';
   double _fontSize = 1.0;
   String _wallpaperId = 'default';
+  String _customWallpaperPath = '';
 
   ThemeMode get themeMode => _themeMode;
   String get searchEngine => _searchEngine;
@@ -21,6 +22,8 @@ class SettingsProvider extends ChangeNotifier {
   String get homepage => _homepage;
   double get fontSize => _fontSize;
   String get wallpaperId => _wallpaperId;
+  String get customWallpaperPath => _customWallpaperPath;
+  bool get hasCustomWallpaper => _customWallpaperPath.isNotEmpty;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
@@ -41,6 +44,7 @@ class SettingsProvider extends ChangeNotifier {
     _homepage = prefs.getString('homepage') ?? '';
     _fontSize = prefs.getDouble('fontSize') ?? 1.0;
     _wallpaperId = prefs.getString('wallpaperId') ?? 'default';
+    _customWallpaperPath = prefs.getString('customWallpaperPath') ?? '';
     notifyListeners();
   }
 
@@ -68,8 +72,20 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> setWallpaper(String id) async {
     _wallpaperId = id;
+    _customWallpaperPath = '';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('wallpaperId', id);
+    await prefs.setString('customWallpaperPath', '');
+    notifyListeners();
+  }
+
+  /// 设置自定义壁纸（本地图片路径）
+  Future<void> setCustomWallpaper(String path) async {
+    _wallpaperId = 'custom';
+    _customWallpaperPath = path;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('wallpaperId', 'custom');
+    await prefs.setString('customWallpaperPath', path);
     notifyListeners();
   }
 

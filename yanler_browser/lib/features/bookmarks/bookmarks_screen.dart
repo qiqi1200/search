@@ -14,7 +14,7 @@ class BookmarksScreen extends StatelessWidget {
     final bookmarks = context.watch<BookmarkService>();
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('书签'),
         centerTitle: true,
@@ -23,6 +23,13 @@ class BookmarksScreen extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded, size: 20),
               tooltip: '清空书签',
+              style: IconButton.styleFrom(
+                backgroundColor: theme.colorScheme.surfaceContainerHigh
+                    .withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               onPressed: () => _confirmClear(context, bookmarks),
             ),
           const SizedBox(width: 4),
@@ -91,8 +98,8 @@ class _BookmarkCard extends StatelessWidget {
 
     return LiquidGlass(
       borderRadius: BorderRadius.circular(18),
-      blur: 16,
-      opacity: isDark ? 0.4 : 0.45,
+      blur: 18,
+      opacity: isDark ? 0.3 : 0.36,
       borderWidth: 1,
       child: ListTile(
         onTap: onTap,
@@ -116,6 +123,13 @@ class _BookmarkCard extends StatelessWidget {
         trailing: IconButton(
           icon: const Icon(Icons.close_rounded, size: 17),
           color: theme.colorScheme.onSurfaceVariant,
+          style: IconButton.styleFrom(
+            backgroundColor: theme.colorScheme.surfaceContainerHigh
+                .withValues(alpha: 0.5),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
           onPressed: onDelete,
         ),
       ),

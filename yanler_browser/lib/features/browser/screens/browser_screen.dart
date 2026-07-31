@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import '../../../providers/browser_provider.dart';
+import '../../../providers/ai_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../../core/constants/search_engines.dart';
 import '../../settings/settings_screen.dart';
@@ -90,6 +91,12 @@ class _BrowserScreenState extends State<BrowserScreen>
     if (browser.activeTabIndex >= 0) {
       browser.updateTabUrl(browser.activeTabIndex, finalUrl);
     }
+
+    // 已有 WebView 时直接驱动加载（新标签页场景由 initialUrlRequest 负责），
+    // 避免依赖 didUpdateWidget 自动重载造成重定向循环。
+    _webViewController?.loadUrl(
+      urlRequest: URLRequest(url: WebUri(finalUrl)),
+    );
   }
 
   /// 刷新/停止 — 加载中停止，否则刷新
@@ -104,12 +111,50 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
+  /// 后退：调用 WebView 原生方法，并刷新按钮可用状态
+  Future<void> _goBack() async {
+    final c = _webViewController;
+    if (c == null) return;
+    await c.goBack();
+    await _refreshNavStateAfterAction();
+  }
+
+  /// 前进：调用 WebView 原生方法，并刷新按钮可用状态
+  Future<void> _goForward() async {
+    final c = _webViewController;
+    if (c == null) return;
+    await c.goForward();
+    await _refreshNavStateAfterAction();
+  }
+
+  /// 前进/后退后稍候刷新按钮可用状态（等待 WebView 历史栈更新）
+  Future<void> _refreshNavStateAfterAction() async {
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 160));
+    if (!mounted) return;
+    final c = _webViewController;
+    if (c == null) return;
+    try {
+      final canBack = await c.canGoBack();
+      final canFwd = await c.canGoForward();
+      if (mounted) {
+        setState(() {
+          _canGoBack = canBack;
+          _canGoForward = canFwd;
+        });
+      }
+    } catch (_) {
+      // WebView 尚未就绪时忽略
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<BrowserProvider, SettingsProvider>(
       builder: (context, browser, settings, _) {
         final isOnNewTab = browser.activeTab?.url.isEmpty ?? true;
         final adblock = context.watch<AdblockEngine>();
+        final ai = context.watch<AIProvider>();
 
         return Scaffold(
           body: SafeArea(
@@ -184,8 +229,9 @@ class _BrowserScreenState extends State<BrowserScreen>
                   canGoBack: _canGoBack,
                   canGoForward: _canGoForward,
                   adBlockCount: adblock.blockedCount,
-                  onBack: () => _webViewController?.goBack(),
-                  onForward: () => _webViewController?.goForward(),
+                  aiActive: ai.agentMode,
+                  onBack: () => _goBack(),
+                  onForward: () => _goForward(),
                   onHome: () => _goHome(browser),
                   onAI: () => _openAIChat(context),
                   onTabSwitch: () => _showTabSwitcher(context),
@@ -232,6 +278,9 @@ class _BrowserScreenState extends State<BrowserScreen>
       builder: (_) => _BottomMenuSheet(
         adBlockCount: adblock.blockedCount,
         canBookmark: currentUrl.isNotEmpty,
+        isDarkModeActive: context.read<SettingsProvider>().isDarkMode,
+        isIncognitoActive: browser.isIncognitoMode,
+        isAIActive: context.read<AIProvider>().agentMode,
         onToggleTheme: () {
           context.read<SettingsProvider>().toggleTheme();
           Navigator.pop(context);
@@ -320,6 +369,9 @@ class _BrowserScreenState extends State<BrowserScreen>
 class _BottomMenuSheet extends StatelessWidget {
   final int adBlockCount;
   final bool canBookmark;
+  final bool isDarkModeActive;
+  final bool isIncognitoActive;
+  final bool isAIActive;
   final VoidCallback onToggleTheme;
   final VoidCallback onOpenSettings;
   final VoidCallback onToggleIncognito;
@@ -331,6 +383,9 @@ class _BottomMenuSheet extends StatelessWidget {
   const _BottomMenuSheet({
     required this.adBlockCount,
     required this.canBookmark,
+    required this.isDarkModeActive,
+    required this.isIncognitoActive,
+    required this.isAIActive,
     required this.onToggleTheme,
     required this.onOpenSettings,
     required this.onToggleIncognito,
@@ -347,113 +402,126 @@ class _BottomMenuSheet extends StatelessWidget {
 
     return LiquidGlass(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      blur: 26,
-      opacity: isDark ? 0.62 : 0.58,
+      blur: 30,
+      opacity: isDark ? 0.42 : 0.38,
       borderWidth: 1,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 拖拽指示条
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // 广告拦截统计条
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHigh
-                    .withValues(alpha: 0.55),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.4),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 16, 8, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 拖拽指示条
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurfaceVariant
+                      .withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.shield_outlined,
-                    size: 14,
-                    color: theme.colorScheme.primary,
+              const SizedBox(height: 14),
+
+              // 广告拦截统计条
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHigh
+                      .withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.4),
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '广告拦截',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '已拦截 $adBlockCount 个',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 14,
                       color: theme.colorScheme.primary,
                     ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '广告拦截',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '已拦截 $adBlockCount 个',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // 功能宫格：深色 / 设置 / 无痕 / AI / 书签 / 历史 / 收藏此页
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                runSpacing: 12,
+                children: [
+                  _MenuButton(
+                    icon: isDark
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                    label: isDark ? '浅色' : '深色',
+                    active: isDarkModeActive,
+                    onTap: onToggleTheme,
                   ),
+                  _MenuButton(
+                    icon: Icons.settings_rounded,
+                    label: '设置',
+                    active: false,
+                    onTap: onOpenSettings,
+                  ),
+                  _MenuButton(
+                    icon: Icons.privacy_tip_outlined,
+                    label: '无痕',
+                    active: isIncognitoActive,
+                    onTap: onToggleIncognito,
+                  ),
+                  _MenuButton(
+                    icon: Icons.auto_awesome_rounded,
+                    label: 'AI',
+                    active: isAIActive,
+                    onTap: onToggleAI,
+                  ),
+                  _MenuButton(
+                    icon: Icons.bookmark_border_rounded,
+                    label: '书签',
+                    active: false,
+                    onTap: onOpenBookmarks,
+                  ),
+                  _MenuButton(
+                    icon: Icons.history_rounded,
+                    label: '历史',
+                    active: false,
+                    onTap: onOpenHistory,
+                  ),
+                  if (canBookmark)
+                    _MenuButton(
+                      icon: Icons.bookmark_add_outlined,
+                      label: '收藏此页',
+                      active: false,
+                      onTap: onAddBookmark,
+                    ),
                 ],
               ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // 功能宫格：4 + 3
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 12,
-              children: [
-                _MenuButton(
-                  icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                  label: isDark ? '浅色' : '深色',
-                  onTap: onToggleTheme,
-                ),
-                _MenuButton(
-                  icon: Icons.settings_rounded,
-                  label: '设置',
-                  onTap: onOpenSettings,
-                ),
-                _MenuButton(
-                  icon: Icons.privacy_tip_outlined,
-                  label: '无痕',
-                  onTap: onToggleIncognito,
-                ),
-                _MenuButton(
-                  icon: Icons.auto_awesome_rounded,
-                  label: 'AI',
-                  onTap: onToggleAI,
-                ),
-                _MenuButton(
-                  icon: Icons.bookmark_border_rounded,
-                  label: '书签',
-                  onTap: onOpenBookmarks,
-                ),
-                _MenuButton(
-                  icon: Icons.history_rounded,
-                  label: '历史',
-                  onTap: onOpenHistory,
-                ),
-                if (canBookmark)
-                  _MenuButton(
-                    icon: Icons.bookmark_add_outlined,
-                    label: '收藏此页',
-                    onTap: onAddBookmark,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-          ],
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
       ),
     );
@@ -463,37 +531,72 @@ class _BottomMenuSheet extends StatelessWidget {
 class _MenuButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool active;
   final VoidCallback onTap;
 
   const _MenuButton({
     required this.icon,
     required this.label,
+    required this.active,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHigh
-                  .withValues(alpha: 0.55),
+              gradient: active
+                  ? const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                    )
+                  : null,
+              color: active
+                  ? null
+                  : theme.colorScheme.surfaceContainerHigh
+                      .withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                color: active
+                    ? theme.colorScheme.primary.withValues(alpha: 0.85)
+                    : theme.colorScheme.outline.withValues(alpha: 0.5),
               ),
+              boxShadow: active
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF8B5CFF).withValues(alpha: 0.28),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
             ),
-            child: Icon(icon, size: 24, color: theme.colorScheme.primary),
+            child: Icon(
+              icon,
+              size: 24,
+              color: active ? Colors.white : theme.colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 6),
-          Text(label, style: theme.textTheme.labelSmall),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: active ? theme.colorScheme.primary : null,
+              fontWeight: active ? FontWeight.w600 : null,
+            ),
+          ),
         ],
       ),
     );

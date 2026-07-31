@@ -226,7 +226,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Row(
           mainAxisSize: MainAxisSize.min,
@@ -415,8 +415,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
                   Expanded(
                     child: LiquidGlass(
                       borderRadius: BorderRadius.circular(24),
-                      blur: 18,
-                      opacity: isDark ? 0.4 : 0.5,
+                      blur: 22,
+                      opacity: isDark ? 0.3 : 0.36,
                       child: TextField(
                         controller: _inputController,
                         minLines: 1,
@@ -485,8 +485,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => LiquidGlass(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        blur: 24,
-        opacity: Theme.of(context).brightness == Brightness.dark ? 0.8 : 0.75,
+        blur: 28,
+        opacity: Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.45,
         child: SafeArea(
           top: false,
           child: SizedBox(

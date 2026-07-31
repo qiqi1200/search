@@ -29,12 +29,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final isDark = theme.brightness == Brightness.dark;
     final history = context.watch<HistoryService>();
 
-    final entries = _query.isEmpty
-        ? history.history
-        : history.search(_query);
+    final entries = _query.isEmpty ? history.history : history.search(_query);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('历史记录'),
         centerTitle: true,
@@ -43,6 +41,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             IconButton(
               icon: const Icon(Icons.delete_outline_rounded, size: 20),
               tooltip: '清空历史',
+              style: IconButton.styleFrom(
+                backgroundColor: theme.colorScheme.surfaceContainerHigh
+                    .withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
               onPressed: () => _confirmClear(context, history),
             ),
           const SizedBox(width: 4),
@@ -56,8 +61,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: LiquidGlass(
                 borderRadius: BorderRadius.circular(18),
-                blur: 16,
-                opacity: isDark ? 0.4 : 0.45,
+                blur: 20,
+                opacity: isDark ? 0.32 : 0.36,
                 child: SizedBox(
                   height: 40,
                   child: Row(
@@ -76,12 +81,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                             hintText: '搜索历史',
                             border: InputBorder.none,
                             isDense: true,
-                            contentPadding:
-                                EdgeInsets.symmetric(vertical: 10),
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
                           ),
                           style: const TextStyle(fontSize: 13),
-                          onChanged: (v) =>
-                              setState(() => _query = v.trim()),
+                          onChanged: (v) => setState(() => _query = v.trim()),
                         ),
                       ),
                       if (_query.isNotEmpty)
@@ -89,6 +92,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           icon: const Icon(Icons.close_rounded, size: 16),
                           padding: EdgeInsets.zero,
                           color: theme.colorScheme.onSurfaceVariant,
+                          style: IconButton.styleFrom(
+                            backgroundColor: theme.colorScheme.surfaceContainerHigh
+                                .withValues(alpha: 0.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             setState(() => _query = '');
@@ -188,8 +198,8 @@ class _HistoryCard extends StatelessWidget {
 
     return LiquidGlass(
       borderRadius: BorderRadius.circular(16),
-      blur: 14,
-      opacity: isDark ? 0.35 : 0.42,
+      blur: 18,
+      opacity: isDark ? 0.3 : 0.36,
       borderWidth: 0.9,
       child: ListTile(
         onTap: onTap,
@@ -225,6 +235,13 @@ class _HistoryCard extends StatelessWidget {
               icon: const Icon(Icons.close_rounded, size: 16),
               padding: EdgeInsets.zero,
               color: theme.colorScheme.onSurfaceVariant,
+              style: IconButton.styleFrom(
+                backgroundColor: theme.colorScheme.surfaceContainerHigh
+                    .withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
               onPressed: onDelete,
             ),
           ],

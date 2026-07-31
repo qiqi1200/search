@@ -3,14 +3,14 @@ import '../../../core/widgets/liquid_glass.dart';
 
 /// 底部导航栏 — 标准浏览器布局，AI 居中
 ///
-/// 布局（保持不动）: ◀ ▶ [spacer] ✦ AI [spacer] ■ ≡
-/// AI 按钮在绝对 C 位，视觉突出
+/// 布局（保持不变）: ◀ ▶ [spacer] ✦AI [spacer] ▦ ⋮
 class BottomBar extends StatelessWidget {
   final int tabCount;
   final bool isIncognito;
   final bool canGoBack;
   final bool canGoForward;
   final int adBlockCount;
+  final bool aiActive;
   final VoidCallback onBack;
   final VoidCallback onForward;
   final VoidCallback onHome;
@@ -25,6 +25,7 @@ class BottomBar extends StatelessWidget {
     required this.canGoBack,
     required this.canGoForward,
     required this.adBlockCount,
+    required this.aiActive,
     required this.onBack,
     required this.onForward,
     required this.onHome,
@@ -40,8 +41,8 @@ class BottomBar extends StatelessWidget {
 
     return LiquidGlass(
       borderRadius: BorderRadius.zero,
-      blur: 24,
-      opacity: isDark ? 0.5 : 0.5,
+      blur: 28,
+      opacity: isDark ? 0.34 : 0.36,
       borderWidth: 0.8,
       child: Padding(
         padding: EdgeInsets.only(
@@ -68,17 +69,16 @@ class BottomBar extends StatelessWidget {
               theme: theme,
             ),
 
-            // 弹性空间将 AI 推向中心
             const Spacer(),
 
-            // AI — 绝对 C 位，视觉焦点
+            // AI — 绝对 C 位
             _AICenterButton(
               onTap: onAI,
               isDark: isDark,
+              active: aiActive,
               theme: theme,
             ),
 
-            // 弹性空间将右侧内容推向右边
             const Spacer(),
 
             // 标签页按钮
@@ -102,7 +102,7 @@ class BottomBar extends StatelessWidget {
   }
 }
 
-/// 导航按钮（后退 / 前进 / 菜单）— 带按压缩放反馈
+/// 导航按钮（后退 / 前进 / 菜单）— 带按压反馈 + 统一圆角底
 class _NavButton extends StatelessWidget {
   final IconData icon;
   final bool enabled;
@@ -130,20 +130,31 @@ class _NavButton extends StatelessWidget {
         splashRadius: 18,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        style: IconButton.styleFrom(
+          backgroundColor: enabled
+              ? theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.5)
+              : Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
     );
   }
 }
 
-/// AI 中心按钮 — 渐变圆形，视觉焦点，绝对 C 位
+/// AI 中心按钮 — 渐变圆形，Agent 模式开启时高亮描边
 class _AICenterButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDark;
+  final bool active;
   final ThemeData theme;
 
   const _AICenterButton({
     required this.onTap,
     required this.isDark,
+    required this.active,
     required this.theme,
   });
 
@@ -151,7 +162,9 @@ class _AICenterButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
         width: 48,
         height: 48,
         decoration: BoxDecoration(
@@ -166,8 +179,10 @@ class _AICenterButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.25),
-            width: 0.8,
+            color: active
+                ? Colors.white.withValues(alpha: 0.7)
+                : Colors.white.withValues(alpha: 0.25),
+            width: active ? 1.8 : 0.8,
           ),
           boxShadow: [
             BoxShadow(
@@ -175,6 +190,11 @@ class _AICenterButton extends StatelessWidget {
               blurRadius: 14,
               offset: const Offset(0, 4),
             ),
+            if (active)
+              BoxShadow(
+                color: const Color(0xFF34C759).withValues(alpha: 0.5),
+                blurRadius: 14,
+              ),
           ],
         ),
         child: Stack(
@@ -255,6 +275,13 @@ class _TabCountButton extends StatelessWidget {
         splashRadius: 18,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        style: IconButton.styleFrom(
+          backgroundColor: theme.colorScheme.surfaceContainerHigh
+              .withValues(alpha: 0.5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
     );
   }

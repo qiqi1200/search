@@ -52,8 +52,8 @@ class LiquidGlass extends StatelessWidget {
     super.key,
     required this.child,
     this.borderRadius,
-    this.blur = 20,
-    this.opacity = 0.55,
+    this.blur = 24,
+    this.opacity = 0.4,
     this.specular = true,
     this.noise = true,
     this.border = true,
@@ -73,7 +73,7 @@ class LiquidGlass extends StatelessWidget {
     // 通透度优化：浅色模式用纯白底（避免暖灰底色导致「发灰」），
     // 深色模式略微提亮底色；不透明度整体下调，让背景透出来。
     final Color fill = isDark
-        ? Color.lerp(baseTint, Colors.white, 0.10)!
+        ? Color.lerp(baseTint, Colors.white, 0.08)!
         : Colors.white;
 
     final Widget surface = ClipRRect(
@@ -100,10 +100,10 @@ class LiquidGlass extends StatelessWidget {
               child: CustomPaint(
                 painter: _NoisePainter(
                   seed: 260607,
-                  density: isDark ? 0.045 : 0.03,
+                  density: isDark ? 0.035 : 0.022,
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.black.withValues(alpha: 0.025),
+                      ? Colors.white.withValues(alpha: 0.035)
+                      : Colors.black.withValues(alpha: 0.02),
                   pointSize: 1.0,
                 ),
               ),
@@ -119,8 +119,8 @@ class LiquidGlass extends StatelessWidget {
                     end: const Alignment(0, 0.3),
                     colors: [
                       isDark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.white.withValues(alpha: 0.7),
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : Colors.white.withValues(alpha: 0.42),
                       Colors.transparent,
                     ],
                   ),

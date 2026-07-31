@@ -30,10 +30,10 @@ class WebViewContainer extends StatefulWidget {
   });
 
   @override
-  State<WebViewContainer> createState() => _WebViewContainerState();
+  State<WebViewContainer> createState() => WebViewContainerState();
 }
 
-class _WebViewContainerState extends State<WebViewContainer> {
+class WebViewContainerState extends State<WebViewContainer> {
   InAppWebViewController? _controller;
 
   @override
@@ -41,26 +41,17 @@ class _WebViewContainerState extends State<WebViewContainer> {
     super.initState();
   }
 
-  @override
-  void didUpdateWidget(WebViewContainer oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // 修复：在已有页面时通过地址栏/搜索导航 — 外部 URL 变化要真正驱动 WebView 加载
-    final newUrl = widget.initialUrl;
-    if (newUrl.isNotEmpty &&
-        newUrl != oldWidget.initialUrl &&
-        _controller != null) {
-      _controller!.loadUrl(urlRequest: URLRequest(url: WebUri(newUrl)));
-    }
-  }
 
   /// 刷新前进/后退可用状态（async 安全）
-  Future<void> _refreshNavState() async {
+  Future<void> refreshNavigationState() async {
     final c = _controller;
     if (c == null) return;
     try {
       final canBack = await c.canGoBack();
       final canFwd = await c.canGoForward();
-      widget.onNavigationStateChanged?.call(canBack, canFwd);
+      if (mounted) {
+        widget.onNavigationStateChanged?.call(canBack, canFwd);
+      }
     } catch (_) {
       // WebView 尚未就绪时忽略
     }
@@ -94,8 +85,14 @@ class _WebViewContainerState extends State<WebViewContainer> {
       onWebViewCreated: (controller) {
         _controller = controller;
         widget.onControllerReady?.call(controller);
+        refreshNavigationState();
       },
       shouldInterceptRequest: (controller, request) async {
+        // 主框架请求绝不拦截：广告过滤只作用于子资源，
+        // 避免命中规则时返回空响应导致整页白屏（搜索页空白问题）。
+        if (request.isForMainFrame == true) {
+          return null;
+        }
         final url = request.url.toString();
         if (adblock.shouldBlock(url, null)) {
           // 返回空响应拦截广告
@@ -113,7 +110,7 @@ class _WebViewContainerState extends State<WebViewContainer> {
           widget.onUrlChanged(url.toString());
         }
         // 导航开始时立即刷新前进/后退状态
-        _refreshNavState();
+        refreshNavigationState();
       },
       onProgressChanged: (controller, progress) {
         widget.onProgressChanged?.call(progress / 100.0);
@@ -125,11 +122,11 @@ class _WebViewContainerState extends State<WebViewContainer> {
           widget.onUrlChanged(url.toString());
         }
         // 更新前进/后退状态
-        _refreshNavState();
+        refreshNavigationState();
       },
       // 历史栈变化时（含前进/后退/链接跳转）实时刷新导航状态
       onUpdateVisitedHistory: (controller, url, isReload) {
-        _refreshNavState();
+        refreshNavigationState();
       },
       onTitleChanged: (controller, title) {
         if (title != null) {
@@ -139,6 +136,12 @@ class _WebViewContainerState extends State<WebViewContainer> {
       onReceivedError: (controller, request, error) {
         widget.onLoadingChanged(false);
         widget.onProgressChanged?.call(1.0);
+        refreshNavigationState();
+      },
+      onReceivedHttpError: (controller, request, errorResponse) {
+        widget.onLoadingChanged(false);
+        widget.onProgressChanged?.call(1.0);
+        refreshNavigationState();
       },
     );
   }

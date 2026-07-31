@@ -187,11 +187,11 @@ class AIProvider extends ChangeNotifier {
   }
 
   /// 向 AI 发送消息（支持代理模式；可被 stopGenerating 中止）
+  /// 向 AI 发送消息（支持代理模式；可被 stopGenerating 中止）
+  ///
+  /// 无论成功、失败、未配置还是被中止，都会把「用户消息 + AI 回复」
+  /// 追加到当前会话中，保证聊天界面始终有完整反馈。
   Future<String> sendMessage(String message) async {
-    if (!isConfigured) {
-      return '请先在 AI 助手界面配置 API Key';
-    }
-
     // 终止指令优先级最高：处理中再次发送视为「停止并重发」
     if (_isProcessing) {
       stopGenerating();
@@ -208,6 +208,12 @@ class AIProvider extends ChangeNotifier {
     session.updatedAt = DateTime.now();
     _persistSessions();
     notifyListeners();
+
+    if (!isConfigured) {
+      const tip = '请先在 AI 助手界面右上角「API 配置」中填写 API Key。';
+      _appendAssistant(tip);
+      return tip;
+    }
 
     _isProcessing = true;
     notifyListeners();
@@ -248,35 +254,47 @@ class AIProvider extends ChangeNotifier {
           return '已停止生成';
         }
 
-        session.messages.add({'role': 'assistant', 'content': content});
-        session.updatedAt = DateTime.now();
-
-        // 限制历史长度
-        if (session.messages.length > 20) {
-          session.messages.removeRange(0, session.messages.length - 20);
-        }
-
         _isProcessing = false;
         _currentClient = null;
-        _persistSessions();
-        notifyListeners();
+        _appendAssistant(content);
         return content;
       } else {
         _isProcessing = false;
         _currentClient = null;
-        notifyListeners();
-        return 'API 请求失败：${response.statusCode} ${response.body}';
+        final err = 'API 请求失败：${response.statusCode} ${response.body}';
+        _appendAssistant(err);
+        return err;
       }
     } catch (e) {
       _isProcessing = false;
       _currentClient = null;
-      notifyListeners();
       if (e.toString().contains('Client is already closed') ||
           e.toString().contains('Connection closed')) {
         return '已停止生成';
       }
-      return '网络错误：$e';
+      final err = '网络错误：$e';
+      _appendAssistant(err);
+      return err;
     }
+  }
+
+  /// 追加一条 AI 回复（若与最后一条相同则跳过，避免重复显示）
+  void _appendAssistant(String content) {
+    final session = activeSession;
+    if (session == null) return;
+    if (session.messages.isNotEmpty &&
+        session.messages.last['role'] == 'assistant' &&
+        session.messages.last['content'] == content) {
+      return;
+    }
+    session.messages.add({'role': 'assistant', 'content': content});
+    session.updatedAt = DateTime.now();
+    // 限制历史长度
+    if (session.messages.length > 20) {
+      session.messages.removeRange(0, session.messages.length - 20);
+    }
+    _persistSessions();
+    notifyListeners();
   }
 
   ChatSession _newSession() {

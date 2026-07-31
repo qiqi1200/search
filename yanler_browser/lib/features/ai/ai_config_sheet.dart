@@ -43,7 +43,9 @@ class _AIConfigSheetState extends State<AIConfigSheet> {
         left: 24,
         right: 24,
         top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        bottom: MediaQuery.of(context).viewInsets.bottom +
+            MediaQuery.of(context).padding.bottom +
+            20,
       ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,

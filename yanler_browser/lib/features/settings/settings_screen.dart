@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
@@ -194,16 +198,17 @@ class _AppearanceSection extends StatelessWidget {
         const _Divider(),
         _SettingsRow(
           label: '壁纸',
-          value: _wallpaperName(settings.wallpaperId),
+          value: _wallpaperName(settings),
           onTap: () => _showWallpaperPicker(context, settings),
         ),
       ],
     );
   }
 
-  String _wallpaperName(String id) {
-    if (id == Wallpapers.defaultId) return '默认';
-    return Wallpapers.byId(id).name;
+  String _wallpaperName(SettingsProvider settings) {
+    if (settings.hasCustomWallpaper) return '自定义';
+    if (settings.wallpaperId == Wallpapers.defaultId) return '默认';
+    return Wallpapers.byId(settings.wallpaperId).name;
   }
 
   void _showWallpaperPicker(BuildContext context, SettingsProvider settings) {
@@ -213,8 +218,8 @@ class _AppearanceSection extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => LiquidGlass(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        blur: 24,
-        opacity: isDark ? 0.8 : 0.75,
+        blur: 28,
+        opacity: isDark ? 0.5 : 0.45,
         child: SafeArea(
           top: false,
           child: Padding(
@@ -255,6 +260,34 @@ class _AppearanceSection extends StatelessWidget {
                         Navigator.pop(sheetContext);
                       },
                     ),
+                    // 自定义（从本地相册/存储选择）
+                    _WallpaperSwatch(
+                      label: '自定义',
+                      selected: settings.hasCustomWallpaper,
+                      gradient: LinearGradient(
+                        colors: isDark
+                            ? [const Color(0xFF23252B), const Color(0xFF2C2E36)]
+                            : [const Color(0xFFE9E5E0), const Color(0xFFDCD8D2)],
+                      ),
+                      child: settings.hasCustomWallpaper &&
+                              File(settings.customWallpaperPath).existsSync()
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.file(
+                                File(settings.customWallpaperPath),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.add_photo_alternate_rounded,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.add_photo_alternate_rounded,
+                              color: Colors.white70,
+                            ),
+                      onTap: () => _pickCustomWallpaper(context, settings),
+                    ),
                     ...Wallpapers.presets.map((w) => _WallpaperSwatch(
                           label: w.name,
                           selected: settings.wallpaperId == w.id,
@@ -270,6 +303,49 @@ class _AppearanceSection extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 从本地相册/存储选择照片并保存为自定义壁纸
+  Future<void> _pickCustomWallpaper(
+    BuildContext context,
+    SettingsProvider settings,
+  ) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 2600,
+      maxHeight: 2600,
+      imageQuality: 92,
+    );
+    if (picked == null || !context.mounted) return;
+
+    final dir = await getApplicationDocumentsDirectory();
+    final folder = Directory('${dir.path}${Platform.pathSeparator}wallpapers');
+    if (!folder.existsSync()) {
+      folder.createSync(recursive: true);
+    }
+    final target = File(
+      '${folder.path}${Platform.pathSeparator}custom_'
+      '${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+    try {
+      await File(picked.path).copy(target.path);
+    } catch (_) {
+      // 部分系统返回只读缓存文件，退化为字节拷贝
+      final bytes = await picked.readAsBytes();
+      await target.writeAsBytes(bytes);
+    }
+    if (!context.mounted) return;
+    await settings.setCustomWallpaper(target.path);
+    if (!context.mounted) return;
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('自定义壁纸已应用'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -507,12 +583,14 @@ class _WallpaperSwatch extends StatelessWidget {
   final String label;
   final bool selected;
   final Gradient gradient;
+  final Widget? child;
   final VoidCallback onTap;
 
   const _WallpaperSwatch({
     required this.label,
     required this.selected,
     required this.gradient,
+    this.child,
     required this.onTap,
   });
 
@@ -544,13 +622,14 @@ class _WallpaperSwatch extends StatelessWidget {
                 ),
               ],
             ),
-            child: selected
-                ? Icon(
-                    Icons.check_rounded,
-                    size: 22,
-                    color: Colors.white.withValues(alpha: 0.9),
-                  )
-                : null,
+            child: child ??
+                (selected
+                    ? Icon(
+                        Icons.check_rounded,
+                        size: 22,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      )
+                    : null),
           ),
           const SizedBox(height: 6),
           Text(

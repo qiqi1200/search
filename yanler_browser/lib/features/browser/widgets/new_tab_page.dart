@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -191,6 +192,8 @@ class _NewTabPageState extends State<NewTabPage>
     final settings = context.watch<SettingsProvider>();
     final wallpaper = Wallpapers.byId(settings.wallpaperId);
     final useDefaultBg = settings.wallpaperId == Wallpapers.defaultId;
+    final hasCustomWallpaper = settings.hasCustomWallpaper &&
+        settings.customWallpaperPath.isNotEmpty;
 
     return Container(
       decoration: BoxDecoration(
@@ -205,8 +208,30 @@ class _NewTabPageState extends State<NewTabPage>
               : wallpaper.colorsFor(theme.brightness),
         ),
       ),
-      child: SafeArea(
-        child: Center(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (hasCustomWallpaper)
+            Image.file(
+              File(settings.customWallpaperPath),
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+            ),
+          if (hasCustomWallpaper)
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    theme.colorScheme.surface.withValues(alpha: 0.42),
+                    theme.colorScheme.surface.withValues(alpha: 0.52),
+                  ],
+                ),
+              ),
+            ),
+          SafeArea(
+            child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Column(
@@ -262,6 +287,8 @@ class _NewTabPageState extends State<NewTabPage>
             ),
           ),
         ),
+      ),
+        ],
       ),
     );
   }
@@ -628,24 +655,25 @@ class _QuickLinksSection extends StatelessWidget {
     final theme = Theme.of(context);
     final quickLinks = context.watch<QuickLinksProvider>();
     final browser = context.read<BrowserProvider>();
+    final hasLinks = quickLinks.links.isNotEmpty;
 
-    if (quickLinks.links.isEmpty) return const SizedBox.shrink();
-
-    // 网格宽度随屏宽自适应：4 列
+    // 网格宽度随屏宽自适应，2-4 列
     final screenWidth = MediaQuery.of(context).size.width;
     final tileWidth = ((screenWidth - 64) / 4).clamp(56.0, 88.0);
 
     return Column(
       children: [
-        Text(
-          '快捷链接',
-          style: TextStyle(
-            fontSize: 11,
-            letterSpacing: 2,
-            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+        if (hasLinks) ...[
+          Text(
+            '快捷链接',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 2,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
           ),
-        ),
-        const SizedBox(height: 18),
+          const SizedBox(height: 18),
+        ],
         Wrap(
           spacing: ((screenWidth - 64 - tileWidth * 4) / 3).clamp(0.0, 24.0),
           runSpacing: 18,
@@ -743,8 +771,7 @@ class _QuickLinksSection extends StatelessWidget {
             onPressed: () {
               final url = urlController.text.trim();
               if (url.isEmpty) return;
-              final normalized =
-                  url.contains('.') ? url : 'https://$url';
+              final normalized = url.contains('.') ? url : 'https://$url';
               quickLinks.add(titleController.text, normalized);
               Navigator.pop(dialogContext);
             },
@@ -756,7 +783,6 @@ class _QuickLinksSection extends StatelessWidget {
   }
 }
 
-/// 单个快捷链接磁贴
 class _QuickLinkTile extends StatelessWidget {
   final double width;
   final String title;
