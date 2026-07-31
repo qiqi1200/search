@@ -205,6 +205,20 @@ class _PrivacySection extends StatelessWidget {
           value: settings.blockThirdPartyCookies,
           onChanged: (v) {},
         ),
+        const _Divider(),
+        _SwitchRow(
+          label: '洁净浏览模式',
+          subtitle: '阅读页自动去除广告/弹窗/浮层',
+          value: settings.readingModeEnabled,
+          onChanged: (v) => settings.setReadingModeEnabled(v),
+        ),
+        const _Divider(),
+        _SwitchRow(
+          label: '漫画无缝续读',
+          subtitle: '滚动到底部自动跳转下一章',
+          value: settings.comicAutoNext,
+          onChanged: (v) => settings.setComicAutoNext(v),
+        ),
       ],
     );
   }

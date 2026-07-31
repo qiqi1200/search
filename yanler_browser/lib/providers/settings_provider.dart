@@ -17,6 +17,10 @@ class SettingsProvider extends ChangeNotifier {
   double _wallpaperOpacity = 0.45;
   double _glassOpacity = 1.0;
 
+  // 洁净浏览模式 & 漫画无缝续读
+  bool _readingModeEnabled = true;
+  bool _comicAutoNext = true;
+
   ThemeMode get themeMode => _themeMode;
   String get searchEngine => _searchEngine;
   bool get adblockEnabled => _adblockEnabled;
@@ -34,6 +38,12 @@ class SettingsProvider extends ChangeNotifier {
 
   /// 液态玻璃磨砂层透明度倍率（0~1，越小玻璃越通透）
   double get glassOpacity => _glassOpacity;
+
+  /// 洁净浏览模式（阅读页自动去广告/弹窗）
+  bool get readingModeEnabled => _readingModeEnabled;
+
+  /// 漫画无缝续读（滚到底部自动跳下一章）
+  bool get comicAutoNext => _comicAutoNext;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
@@ -57,6 +67,8 @@ class SettingsProvider extends ChangeNotifier {
     _customWallpaperPath = prefs.getString('customWallpaperPath') ?? '';
     _wallpaperOpacity = prefs.getDouble('wallpaperOpacity') ?? 0.45;
     _glassOpacity = prefs.getDouble('glassOpacity') ?? 1.0;
+    _readingModeEnabled = prefs.getBool('readingModeEnabled') ?? true;
+    _comicAutoNext = prefs.getBool('comicAutoNext') ?? true;
     notifyListeners();
   }
 
@@ -128,6 +140,22 @@ class SettingsProvider extends ChangeNotifier {
     _glassOpacity = value.clamp(0.0, 1.0);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('glassOpacity', _glassOpacity);
+    notifyListeners();
+  }
+
+  /// 洁净浏览模式开关
+  Future<void> setReadingModeEnabled(bool value) async {
+    _readingModeEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('readingModeEnabled', value);
+    notifyListeners();
+  }
+
+  /// 漫画无缝续读开关
+  Future<void> setComicAutoNext(bool value) async {
+    _comicAutoNext = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('comicAutoNext', value);
     notifyListeners();
   }
 }

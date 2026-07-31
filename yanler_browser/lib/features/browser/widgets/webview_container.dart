@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/settings_provider.dart';
 import '../../adblock/adblock_engine.dart';
+import '../../reading/reading_mode_service.dart';
 
 class WebViewContainer extends StatefulWidget {
   final String tabId;
@@ -259,6 +260,20 @@ class WebViewContainerState extends State<WebViewContainer>
         }
         // 更新前进/后退状态
         refreshNavigationState();
+
+        // 洁净浏览模式：阅读页自动注入清理脚本
+        if (settings.readingModeEnabled && ReadingModeService.isReadingPage(urlStr)) {
+          try {
+            await controller.evaluateJavascript(source: ReadingModeService.cleanScript);
+          } catch (_) {}
+        }
+
+        // 漫画无缝续读：检测下一章 + 滚动到底自动跳转
+        if (settings.comicAutoNext && ReadingModeService.isComicPage(urlStr)) {
+          try {
+            await controller.evaluateJavascript(source: ReadingModeService.comicContinuationScript);
+          } catch (_) {}
+        }
       },
       // 历史栈变化时（含前进/后退/链接跳转）实时刷新导航状态
       onUpdateVisitedHistory: (controller, url, isReload) {
