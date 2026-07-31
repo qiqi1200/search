@@ -98,6 +98,8 @@ class WebViewContainerState extends State<WebViewContainer>
     } catch (_) {
       // WebView 尚未就绪时忽略
     }
+    // 延迟刷新：WebView 内部历史栈更新有微小延迟
+    await Future.delayed(const Duration(milliseconds: 80));
     await refreshNavigationState();
   }
 
@@ -111,6 +113,7 @@ class WebViewContainerState extends State<WebViewContainer>
     } catch (_) {
       // WebView 尚未就绪时忽略
     }
+    await Future.delayed(const Duration(milliseconds: 80));
     await refreshNavigationState();
   }
 
@@ -190,8 +193,11 @@ class WebViewContainerState extends State<WebViewContainer>
 
   @override
   Widget build(BuildContext context) {
+    // settings 用 watch：JS开关等变更时需重建 WebView
     final settings = context.watch<SettingsProvider>();
-    final adblock = context.watch<AdblockEngine>();
+    // adblock 用 read：shouldInterceptRequest 回调内直接调用实例方法，
+    // 无需因 blockedCount 变化而重建整个 WebView（消除卡顿）
+    final adblock = context.read<AdblockEngine>();
 
     if (widget.initialUrl.isEmpty) {
       return const SizedBox.shrink();
@@ -258,8 +264,11 @@ class WebViewContainerState extends State<WebViewContainer>
           _pendingUrl = null;
           widget.onUrlChanged(urlStr);
         }
-        // 更新前进/后退状态
+        // 更新前进/后退状态（立即 + 延迟双保险）
         refreshNavigationState();
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) refreshNavigationState();
+        });
 
         // 洁净浏览模式：阅读页自动注入清理脚本
         if (settings.readingModeEnabled && ReadingModeService.isReadingPage(urlStr)) {

@@ -175,8 +175,9 @@ class _BrowserScreenState extends State<BrowserScreen>
     return Consumer2<BrowserProvider, SettingsProvider>(
       builder: (context, browser, settings, _) {
         final isOnNewTab = browser.activeTab?.url.isEmpty ?? true;
-        final adblock = context.watch<AdblockEngine>();
-        final ai = context.watch<AIProvider>();
+        // 仅监听 blockedCount 变化，避免广告拦截内部状态变更导致整棵树重建
+        final adblockCount = context.select<AdblockEngine, int>((e) => e.blockedCount);
+        final aiActive = context.select<AIProvider, bool>((p) => p.agentMode);
 
         return Scaffold(
           body: SafeArea(
@@ -243,8 +244,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   isIncognito: browser.isIncognitoMode,
                   canGoBack: _canGoBack,
                   canGoForward: _canGoForward,
-                  adBlockCount: adblock.blockedCount,
-                  aiActive: ai.agentMode,
+                  adBlockCount: adblockCount,
+                  aiActive: aiActive,
                   onBack: () => _goBack(),
                   onForward: () => _goForward(),
                   onHome: () => _goHome(browser),

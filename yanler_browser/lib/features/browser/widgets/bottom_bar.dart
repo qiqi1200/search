@@ -103,7 +103,7 @@ class BottomBar extends StatelessWidget {
   }
 }
 
-/// 导航按钮（后退 / 前进 / 菜单）— 带按压反馈 + 统一圆角底
+/// 导航按钮（后退 / 前进 / 菜单）— 带按压反馈 + 统一圆角底 + 高光效果
 class _NavButton extends StatelessWidget {
   final IconData icon;
   final bool enabled;
@@ -122,22 +122,24 @@ class _NavButton extends StatelessWidget {
     return SizedBox(
       width: 40,
       height: 40,
-      child: IconButton(
-        icon: Icon(icon, size: 18),
+      child: Material(
         color: enabled
-            ? theme.colorScheme.onSurface
-            : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.25),
-        onPressed: onTap,
-        splashRadius: 18,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-        style: IconButton.styleFrom(
-          backgroundColor: enabled
-              ? theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.5)
-              : Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            ? theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.5)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          splashColor: theme.colorScheme.primary.withValues(alpha: 0.15),
+          highlightColor: theme.colorScheme.primary.withValues(alpha: 0.08),
+          child: Center(
+            child: Icon(
+              icon,
+              size: 18,
+              color: enabled
+                  ? theme.colorScheme.onSurface
+                  : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.25),
+            ),
           ),
         ),
       ),

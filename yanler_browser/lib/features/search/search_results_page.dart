@@ -72,7 +72,17 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
               child: _loading
                   ? _LoadingView(isDark: isDark)
                   : _error != null
-                      ? _ErrorView(error: _error!, onRetry: _search)
+                      ? _ErrorView(
+                          error: _error!,
+                          query: widget.query,
+                          onRetry: _search,
+                          onFallback: () {
+                            // 回退到 Bing WebView 直跳
+                            final bingUrl =
+                                'https://www.bing.com/search?q=${Uri.encodeComponent(widget.query)}';
+                            Navigator.pop(context, bingUrl);
+                          },
+                        )
                       : _results.isEmpty
                           ? _EmptyView(isDark: isDark)
                           : _ResultsList(
@@ -260,8 +270,15 @@ class _EmptyView extends StatelessWidget {
 /// 错误视图
 class _ErrorView extends StatelessWidget {
   final String error;
+  final String query;
   final VoidCallback onRetry;
-  const _ErrorView({required this.error, required this.onRetry});
+  final VoidCallback onFallback;
+  const _ErrorView({
+    required this.error,
+    required this.query,
+    required this.onRetry,
+    required this.onFallback,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -281,9 +298,19 @@ class _ErrorView extends StatelessWidget {
             fontSize: 11, color: theme.colorScheme.onSurfaceVariant,
           ), textAlign: TextAlign.center),
           const SizedBox(height: 16),
-          FilledButton.tonal(
-            onPressed: onRetry,
-            child: const Text('重试'),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FilledButton.tonal(
+                onPressed: onRetry,
+                child: const Text('重试'),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(
+                onPressed: onFallback,
+                child: const Text('用 Bing 搜索'),
+              ),
+            ],
           ),
         ],
       ),

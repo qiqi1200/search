@@ -27,7 +27,8 @@ class AggregatedSearchService {
   static const _ua =
       'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36';
 
-  /// 并发搜索所有引擎，返回去重排序后的统一结果
+  /// 并发搜索所有引擎，返回去重排序后的统一结果。
+  /// 如果所有引擎均失败，抛出异常以便调用方回退到 WebView 直跳。
   static Future<List<SearchResultItem>> search(String query) async {
     final futures = <Future<List<SearchResultItem>>>[
       _searchBing(query),
@@ -38,6 +39,11 @@ class AggregatedSearchService {
 
     final results = await Future.wait(futures);
     final all = results.expand((list) => list).toList();
+
+    // 所有引擎全部失败 → 抛异常，调用方回退到 Bing WebView
+    if (all.isEmpty) {
+      throw Exception('所有引擎暂无结果，请重试');
+    }
 
     // 去重：按 URL host+path 归一化
     final seen = <String>{};
