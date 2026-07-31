@@ -39,6 +39,8 @@ jobs:
     needs: analyze
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    env:
+      YANLER_MAVEN_MIRROR: 'false'
     steps:
       - uses: actions/checkout@v4
 
@@ -64,7 +66,7 @@ jobs:
   build_windows:
     name: Build Windows exe
     needs: analyze
-    runs-on: windows-latest
+    runs-on: windows-2022
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4

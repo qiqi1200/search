@@ -18,6 +18,8 @@ jobs:
   build_apk:
     name: Build & Upload APK
     runs-on: ubuntu-latest
+    env:
+      YANLER_MAVEN_MIRROR: 'false'
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +58,7 @@ jobs:
 
   build_windows:
     name: Build & Upload Windows
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
 

@@ -9,11 +9,15 @@ pluginManagement {
 
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
+    // CI（GitHub Actions 海外 Runner）设 YANLER_MAVEN_MIRROR=false 走官方仓库；
+    // 本地（国内网络）默认镜像优先，保证两种环境都能正常下载依赖。
+    def useMirrorFirst = System.getenv('YANLER_MAVEN_MIRROR') != 'false'
     repositories {
-        // 国内镜像（校园网无法直连 google()）
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-        maven { url 'https://maven.aliyun.com/repository/central' }
+        if (useMirrorFirst) {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+            maven { url 'https://maven.aliyun.com/repository/central' }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
