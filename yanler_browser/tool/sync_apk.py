@@ -14,6 +14,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -61,26 +62,6 @@ def fetch_json(url: str, timeout: int = 20) -> dict:
     raise last_err
 
 
-def download(url: str, dest: str) -> None:
-    """直连优先，失败/卡顿时自动回退到加速镜像（仅作 fallback）。"""
-    sources = [url] + [m + url for m in MIRRORS]
-    last_err: Exception = RuntimeError("no download source")
-    for i, src in enumerate(sources):
-        name = "直连" if i == 0 else "镜像 " + MIRRORS[i - 1]
-        try:
-            _download_single(src, dest, timeout=300)
-            log(f"下载成功（{name}）")
-            return
-        except Exception as e:
-            last_err = e
-            log(f"下载失败（{name}）：{e}", notify=False)
-            try:
-                os.remove(dest)
-            except Exception:
-                pass
-    raise last_err
-
-
 def _download_single(url: str, dest: str, timeout: int = 90) -> None:
     """带停滞检测与完整性校验的下载。"""
     req = urllib.request.Request(url, headers=UA)
@@ -102,8 +83,59 @@ def _download_single(url: str, dest: str, timeout: int = 90) -> None:
             raise IOError(f"下载不完整：{received}/{total}")
 
 
+def download(url: str, dest: str) -> None:
+    """直连优先，失败/卡顿时自动回退到加速镜像（仅作 fallback）。"""
+    sources = [url] + [m + url for m in MIRRORS]
+    last_err: Exception = RuntimeError("no download source")
+    for i, src in enumerate(sources):
+        name = "直连" if i == 0 else "镜像 " + MIRRORS[i - 1]
+        try:
+            _download_single(src, dest, timeout=300)
+            log(f"下载成功（{name}）")
+            return
+        except Exception as e:
+            last_err = e
+            log(f"下载失败（{name}）：{e}", notify=False)
+            try:
+                os.remove(dest)
+            except Exception:
+                pass
+    raise last_err
+
+
+def prune_old_apks() -> None:
+    """D:\apk 只保留版本号最大的 yanler-*.apk，删除其余旧包。
+
+    无论 APK 来自云端同步还是手动放置，都避免多版本并存。
+    """
+    try:
+        files = [
+            f for f in os.listdir(APK_DIR)
+            if f.startswith("yanler-") and f.endswith(".apk")
+        ]
+    except OSError:
+        return
+    if len(files) <= 1:
+        return
+
+    def ver(f: str):
+        m = re.match(r"yanler-(\d+)\.(\d+)\.(\d+)-release\.apk", f)
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
+
+    files.sort(key=ver)
+    for old in files[:-1]:
+        try:
+            os.remove(os.path.join(APK_DIR, old))
+            log(f"已清理旧包 {old}")
+        except OSError:
+            pass
+
+
 def main() -> int:
     os.makedirs(APK_DIR, exist_ok=True)
+
+    # 0. 清理旧包：只保留版本号最大的一个
+    prune_old_apks()
 
     # 1. 查最新 Release
     try:
@@ -114,6 +146,7 @@ def main() -> int:
 
     tag = (data.get("tag_name") or "").lstrip("v")
     assets = data.get("assets") or []
+
     def _is_split(name: str) -> bool:
         return any(k in name for k in ("armv7a", "arm64", "x86_64", "windows"))
 
@@ -151,15 +184,6 @@ def main() -> int:
         except Exception:
             pass
         return 1
-
-    # 4. 清理旧包（保留本次目标文件）
-    for name in os.listdir(APK_DIR):
-        if name.startswith("yanler-") and name.endswith(".apk") and name != os.path.basename(dest):
-            try:
-                os.remove(os.path.join(APK_DIR, name))
-                log(f"已删除旧包 {name}")
-            except Exception:
-                pass
 
     os.replace(tmp, dest)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
