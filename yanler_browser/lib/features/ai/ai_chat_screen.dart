@@ -22,6 +22,7 @@ class AIChatScreen extends StatefulWidget {
 class _AIChatScreenState extends State<AIChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  final _inputFocusNode = FocusNode();
 
   // AI 回复中的待执行命令（等待用户批准）
   List<String> _pendingCommands = [];
@@ -40,6 +41,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
         history: context.read<HistoryService>(),
       );
       ai.authorizeRequest = (desc) => _confirmCommand('允许 AI 执行此操作？\n\n$desc');
+      // 自动聚焦输入框并唤起键盘
+      _inputFocusNode.requestFocus();
     });
   }
 
@@ -47,6 +50,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
   void dispose() {
     _inputController.dispose();
     _scrollController.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -343,6 +347,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                       opacity: isDark ? 0.3 : 0.36,
                       child: TextField(
                         controller: _inputController,
+                        focusNode: _inputFocusNode,
                         minLines: 1,
                         maxLines: 4,
                         decoration: InputDecoration(

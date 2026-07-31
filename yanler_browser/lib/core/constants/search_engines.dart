@@ -12,8 +12,8 @@ class SearchEngine {
 
 class SearchEngines {
   static const List<SearchEngine> engines = [
-    // Yanler Search = 内置搜索，后端走 Bing（国内/海外均可用）。
-    // 曾指向 http://localhost:8080 本地服务，导致「搜索无响应」。
+    // Yanler Search = 内置聚合搜索，并发请求 Bing/百度/搜狗/DuckDuckGo，
+    // 统一结果页展示，点击结果直接在 WebView 加载。
     SearchEngine(
       name: 'Yanler Search',
       url: 'https://www.bing.com/search?q=',

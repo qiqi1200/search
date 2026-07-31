@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -25,6 +26,8 @@ class AdblockEngine extends ChangeNotifier {
   bool _isEnabled = true;
   int _blockedCount = 0;
   final List<String> _blockedUrls = [];
+  Timer? _throttleTimer;
+  bool _dirty = false;
 
   bool get isInitialized => _isInitialized;
   bool get isEnabled => _isEnabled;
@@ -248,6 +251,160 @@ class AdblockEngine extends ChangeNotifier {
     '||baidubce.com^',
     '||bdimg.com^',
     '||bdydns.com^',
+
+    // === 漫画/小说站广告 ===
+    '||ad.flurry.com^',
+    '||ad.12306.cn^',
+    '||ad.caijing.com.cn^',
+    '||ad.hefei.cc^',
+    '||ad.sina.com.cn^',
+    '||ad.sohu.com^',
+    '||ad.360.cn^',
+    '||ad.51.la^',
+    '||ad.jxnews.com.cn^',
+    '||ad.dzwww.com^',
+    '||ad.xinhuanet.com^',
+    '||ad.chinadaily.com.cn^',
+    '||ad.rednet.cn^',
+    '||ad.gmw.cn^',
+    '||ad.thepaper.cn^',
+    '||ad.17173.com^',
+    '||ad.duowan.com^',
+    '||ad.pconline.com.cn^',
+    '||ad.zol.com.cn^',
+    '||ad.pchome.net^',
+    '||ad.ithome.com^',
+    '||ad.cnbeta.com^',
+    '||ad.mydrivers.com^',
+    '||ad.newsmth.net^',
+    '||ad.hupu.com^',
+    '||ad.mop.com^',
+    '||ad.17173.com^',
+    '||ad.duowan.com^',
+    '||ad.pconline.com.cn^',
+    '||ad.zol.com.cn^',
+    '||ad.pchome.net^',
+    '||ad.ithome.com^',
+    '||ad.cnbeta.com^',
+    '||ad.mydrivers.com^',
+    '||ad.newsmth.net^',
+    '||ad.hupu.com^',
+    '||ad.mop.com^',
+
+    // === 视频站广告 ===
+    '||ad.youku.com^',
+    '||ad.tudou.com^',
+    '||ad.iqiyi.com^',
+    '||ad.bilibili.com^',
+    '||ad.mgtv.com^',
+    '||ad.sohu.com^',
+    '||ad.letv.com^',
+    '||ad.pptv.com^',
+    '||ad.fun.tv^',
+    '||ad.kankan.com^',
+    '||ad.xunlei.com^',
+    '||ad.56.com^',
+    '||ad.6.cn^',
+    '||ad.acfun.cn^',
+    '||ad.douyu.com^',
+    '||ad.huya.com^',
+    '||ad.zhanqi.tv^',
+    '||ad.yy.com^',
+    '||ad.9158.com^',
+    '||ad.huajiao.com^',
+    '||ad.inke.cn^',
+    '||ad.yizhibo.com^',
+    '||ad.kuaishou.com^',
+
+    // === 通用广告关键词 ===
+    '||ads.',
+    '||ad.',
+    '||adv.',
+    '||advert.',
+    '||adserver.',
+    '||adservice.',
+    '||adclick.',
+    '||adtrack.',
+    '||adview.',
+    '||admedia.',
+    '||adn.',
+    '||dsp.',
+    '||ssp.',
+    '||tracking.',
+    '||tracker.',
+    '||analytics.',
+    '||stat.',
+    '||stats.',
+    '||log.',
+    '||logs.',
+    '||beacon.',
+    '||metric.',
+    '||metrics.',
+    '||telemetry.',
+    '||monitor.',
+    '||count.',
+    '||counter.',
+    '||click.',
+    '||clicks.',
+    '||track.',
+    '||ping.',
+    '||pings.',
+    '||report.',
+    '||reports.',
+    '||data.',
+    '||collect.',
+    '||event.',
+    '||events.',
+
+    // === 弹窗/浮动广告元素 ===
+    '##.popup',
+    '##.modal',
+    '##.overlay',
+    '##.dialog',
+    '##.lightbox',
+    '##.fancybox',
+    '##.mfp-',
+    '##.swal2-',
+    '##.sweetalert',
+    '##.toast',
+    '##.notification',
+    '##.alert',
+    '##.banner',
+    '##.floating',
+    '##.fixed-bottom',
+    '##.fixed-top',
+    '##.sticky',
+    '##.slide-in',
+    '##.fade-in',
+    '##.pop-up',
+    '##.popunder',
+    '##.interstitial',
+    '##.splash',
+    '##.welcome',
+    '##.cookie',
+    '##.consent',
+    '##.gdpr',
+    '##.privacy',
+    '##.policy',
+    '##.notice',
+    '##.message',
+    '##.info-box',
+    '##.info-bar',
+    '##.top-bar',
+    '##.bottom-bar',
+    '##.side-bar',
+    '##.sidebar-ad',
+    '##.header-ad',
+    '##.footer-ad',
+    '##.content-ad',
+    '##.in-article-ad',
+    '##.in-feed-ad',
+    '##.native-ad',
+    '##.sponsored',
+    '##.promoted',
+    '##.recommended',
+    '##.related-ads',
+    '##.you-may-like',
   ];
 
   Future<void> initialize() async {
@@ -363,7 +520,15 @@ class AdblockEngine extends ChangeNotifier {
         if (_blockedUrls.length < 50) {
           _blockedUrls.add(url.length > 80 ? '${url.substring(0, 80)}...' : url);
         }
-        notifyListeners();
+        // 节流通知：最多每 800ms 通知一次 UI，避免页面加载时几十个广告请求导致掉帧
+        _dirty = true;
+        _throttleTimer ??= Timer(const Duration(milliseconds: 800), () {
+          _throttleTimer = null;
+          if (_dirty) {
+            _dirty = false;
+            notifyListeners();
+          }
+        });
         return true;
       }
     }
@@ -374,7 +539,16 @@ class AdblockEngine extends ChangeNotifier {
   void resetStats() {
     _blockedCount = 0;
     _blockedUrls.clear();
+    _dirty = false;
+    _throttleTimer?.cancel();
+    _throttleTimer = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _throttleTimer?.cancel();
+    super.dispose();
   }
 
   bool _matchRule(AdblockRule rule, String urlLower) {

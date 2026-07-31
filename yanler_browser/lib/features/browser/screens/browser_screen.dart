@@ -6,6 +6,7 @@ import '../../../providers/browser_provider.dart';
 import '../../../providers/ai_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../search/search_service.dart';
+import '../../search/search_results_page.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
 import '../../ai/ai_chat_screen.dart';
@@ -93,9 +94,42 @@ class _BrowserScreenState extends State<BrowserScreen>
   /// 2. 通过 NavBus 驱动「当前活动 WebView 实例」真正加载；
   /// 3. 若 WebView 尚未创建（新标签页首跳），由 WebViewContainer
   ///    以 initialUrl 新建并加载，pendingUrl 机制兜底。
+  ///
+  /// 修复「前进/后退一级页面失效」：不再手动重置导航状态，
+  /// 完全由 WebView 回调 (onUpdateVisitedHistory / onLoadStop) 驱动。
   Future<void> _navigateTo(String input) async {
     final settings = context.read<SettingsProvider>();
-    final url = SearchService.normalizeInput(input, settings.searchEngine);
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return;
+
+    // 判断输入是否为搜索词（非 URL）
+    final isUrl = trimmed.startsWith('http://') ||
+        trimmed.startsWith('https://') ||
+        (trimmed.contains('.') && !trimmed.contains(' '));
+
+    // Yanler Search 引擎 + 搜索词 → 打开聚合搜索结果页
+    if (!isUrl && settings.searchEngine == 'Yanler Search') {
+      final result = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SearchResultsPage(query: trimmed),
+        ),
+      );
+      // 用户点击结果项后返回 URL，继续导航
+      if (result != null && result.isNotEmpty && mounted) {
+        final browser = context.read<BrowserProvider>();
+        if (browser.activeTabIndex >= 0) {
+          browser.updateTabUrl(browser.activeTabIndex, result);
+        }
+        final controller = NavBus.active;
+        if (controller != null) {
+          await controller.loadUrl(result);
+        }
+      }
+      return;
+    }
+
+    final url = SearchService.normalizeInput(trimmed, settings.searchEngine);
     if (url.isEmpty) return;
 
     final browser = context.read<BrowserProvider>();
@@ -103,17 +137,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       browser.updateTabUrl(browser.activeTabIndex, url);
     }
 
+    // WebView 已存在时直接驱动加载；不存在时由 initialUrl 新建
     final controller = NavBus.active;
     if (controller != null) {
       await controller.loadUrl(url);
-      await controller.refreshNavigationState();
-    }
-
-    if (mounted) {
-      setState(() {
-        _canGoBack = false;
-        _canGoForward = false;
-      });
     }
   }
 
@@ -270,7 +297,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         isAIActive: context.read<AIProvider>().agentMode,
         onToggleTheme: () {
           context.read<SettingsProvider>().toggleTheme();
-          Navigator.pop(context);
+          // 不关闭菜单，允许用户连续操作
         },
         onOpenSettings: () {
           Navigator.pop(context);
@@ -278,7 +305,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         },
         onToggleIncognito: () {
           context.read<BrowserProvider>().toggleIncognito();
-          Navigator.pop(context);
+          // 不关闭菜单，允许用户连续操作
         },
         onToggleAI: () {
           Navigator.pop(context);

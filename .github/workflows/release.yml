@@ -34,6 +34,21 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # 修复版本号不匹配：确保 pubspec.yaml 版本与 Release 标签严格一致
+      - name: Sync version from tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            VER="${TAG#v}"
+          fi
+          # 提取当前 build 号（+ 后面的数字）
+          FULL_VER=$(grep -oP 'version:\s*\K.*' pubspec.yaml | tr -d ' ')
+          BUILD_NUM="${FULL_VER##*+}"
+          sed -i "s/^version: .*/version: ${VER}+${BUILD_NUM}/" pubspec.yaml
+          echo "✅ pubspec.yaml version synced to ${VER}+${BUILD_NUM}"
+
       - name: Install dependencies
         run: flutter pub get
 
