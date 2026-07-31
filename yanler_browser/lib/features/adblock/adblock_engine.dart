@@ -504,7 +504,23 @@ class AdblockEngine extends ChangeNotifier {
   bool shouldBlock(String url, String? resourceType) {
     if (!_isInitialized || !_isEnabled) return false;
 
+    // 关键资源类型（CSS/字体）一律放行，避免页面样式丢失
+    if (resourceType == 'STYLESHEET' || resourceType == 'FONT') {
+      return false;
+    }
+
     final urlLower = url.toLowerCase();
+
+    // URL 后缀防御：即使 resourceType 为空，也通过扩展名保护关键资源
+    if (urlLower.endsWith('.css') ||
+        urlLower.contains('.css?') ||
+        urlLower.endsWith('.woff') ||
+        urlLower.endsWith('.woff2') ||
+        urlLower.endsWith('.ttf') ||
+        urlLower.endsWith('.otf') ||
+        urlLower.endsWith('.eot')) {
+      return false;
+    }
 
     // 先检查例外规则
     for (final rule in _rules) {
