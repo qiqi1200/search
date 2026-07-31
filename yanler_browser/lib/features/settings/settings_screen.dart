@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/ai_provider.dart';
 import '../../core/constants/search_engines.dart';
@@ -10,6 +12,7 @@ import '../bookmarks/bookmark_service.dart';
 import '../bookmarks/bookmarks_screen.dart';
 import '../history/history_service.dart';
 import '../history/history_screen.dart';
+import '../updater/update_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -33,6 +36,8 @@ class SettingsScreen extends StatelessWidget {
           _AISection(),
           SizedBox(height: 16),
           _DataSection(),
+          SizedBox(height: 16),
+          _AboutSection(),
           SizedBox(height: 32),
         ],
       ),
@@ -560,6 +565,56 @@ class _WallpaperSwatch extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 关于 — 版本号与检查更新
+class _AboutSection extends StatefulWidget {
+  const _AboutSection();
+
+  @override
+  State<_AboutSection> createState() => _AboutSectionState();
+}
+
+class _AboutSectionState extends State<_AboutSection> {
+  String _version = '…';
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((p) {
+      if (mounted) setState(() => _version = p.version);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsCard(
+      title: '关于',
+      icon: Icons.info_outline_rounded,
+      children: [
+        _SettingsRow(
+          label: '版本',
+          value: 'v$_version',
+          onTap: () {},
+        ),
+        const _Divider(),
+        _SettingsRow(
+          label: '检查更新',
+          value: 'GitHub Releases',
+          onTap: () => UpdateService.runCheckWithUi(context),
+        ),
+        const _Divider(),
+        _SettingsRow(
+          label: '更新日志',
+          value: '查看',
+          onTap: () => launchUrl(
+            Uri.parse('https://github.com/qiqi1200/search/releases'),
+            mode: LaunchMode.externalApplication,
+          ),
+        ),
+      ],
     );
   }
 }

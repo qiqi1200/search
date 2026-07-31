@@ -5,6 +5,14 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// 正式签名（android/key.properties，已被 gitignore）。
+// 本地与 GitHub Actions 共用同一密钥，保证更新安装时签名一致。
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.yanler.yanler_browser"
     compileSdk = flutter.compileSdkVersion
@@ -17,6 +25,17 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropertiesFile.exists()) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
     }
 
     defaultConfig {
@@ -32,9 +51,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.debug
+            // 有正式密钥时用正式签名（保证更新一致性）；否则退回 debug 签名便于开发
+            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

@@ -30,6 +30,24 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Prepare release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > android/key.jks
+            echo "storeFile=../key.jks" > android/key.properties
+            echo "storePassword=$KEYSTORE_PASSWORD" >> android/key.properties
+            echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+            echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
+            echo "::notice::Release signing configured"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret 未配置，本次使用 debug 签名（无法覆盖安装正式签名 APK）。请在仓库 Settings -> Secrets 配置后重打 tag。"
+          fi
+
       - name: Verify
         run: flutter analyze
 

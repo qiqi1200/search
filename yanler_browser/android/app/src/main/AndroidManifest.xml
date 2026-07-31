@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 浏览器必需：网络访问 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 应用内更新：安装下载的 APK -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
-        android:label="yanler_browser"
+        android:label="Yanler"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

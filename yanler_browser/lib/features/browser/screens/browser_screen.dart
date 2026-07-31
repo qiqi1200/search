@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import '../../bookmarks/bookmark_service.dart';
 import '../../bookmarks/bookmarks_screen.dart';
 import '../../history/history_service.dart';
 import '../../history/history_screen.dart';
+import '../../updater/update_service.dart';
 import '../widgets/address_bar.dart';
 import '../widgets/bottom_bar.dart';
 import '../widgets/tab_switcher.dart';
@@ -44,6 +46,21 @@ class _BrowserScreenState extends State<BrowserScreen>
       if (browser.tabCount == 0) {
         browser.addTab();
       }
+      // 启动静默检查更新（仅一次；失败静默，校园网下不打扰）
+      _scheduleUpdateCheck();
+    });
+  }
+
+  static bool _updateChecked = false;
+
+  void _scheduleUpdateCheck() {
+    if (_updateChecked) return;
+    _updateChecked = true;
+    Timer(const Duration(seconds: 4), () async {
+      if (!mounted) return;
+      final result = await UpdateService.checkForUpdates();
+      if (!mounted || result.info == null) return;
+      UpdateService.showUpdateDialog(context, result.info!);
     });
   }
 

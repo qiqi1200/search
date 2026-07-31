@@ -42,5 +42,9 @@ void main() {
 
     // 新标签页应显示品牌字标
     expect(find.byType(BrowserScreen), findsOneWidget);
+
+    // 触发并消化启动时的静默更新检查定时器，避免 pending timer 断言
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
   });
 }

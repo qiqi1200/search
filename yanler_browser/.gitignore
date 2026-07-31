@@ -57,3 +57,5 @@ Thumbs.db
 # Android 本地配置（含本机 SDK 路径）
 android/local.properties
 android/key.properties
+android/*.jks
+android/*.keystore
