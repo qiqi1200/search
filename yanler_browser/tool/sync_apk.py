@@ -16,6 +16,7 @@ import json
 import os
 import shutil
 import sys
+import time
 import urllib.request
 
 APK_DIR = r"D:\apk"
@@ -46,10 +47,52 @@ def fetch_json(url: str, timeout: int = 20) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+MIRRORS = [
+    # 国内加速镜像（仅作为直连失败/卡顿时的回退）
+    "https://gh-proxy.com/",
+    "https://ghfast.top/",
+]
+
+
 def download(url: str, dest: str) -> None:
+    """直连优先，失败/卡顿时自动回退到加速镜像（仅作 fallback）。"""
+    sources = [url] + [m + url for m in MIRRORS]
+    last_err: Exception = RuntimeError("no download source")
+    for i, src in enumerate(sources):
+        name = "直连" if i == 0 else "镜像 " + MIRRORS[i - 1]
+        try:
+            _download_single(src, dest, timeout=300)
+            log(f"下载成功（{name}）")
+            return
+        except Exception as e:
+            last_err = e
+            log(f"下载失败（{name}）：{e}", notify=False)
+            try:
+                os.remove(dest)
+            except Exception:
+                pass
+    raise last_err
+
+
+def _download_single(url: str, dest: str, timeout: int = 90) -> None:
+    """带停滞检测与完整性校验的下载。"""
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=600) as r, open(dest, "wb") as f:
-        shutil.copyfileobj(r, f)
+    with urllib.request.urlopen(req, timeout=timeout) as r, open(dest, "wb") as f:
+        total = int(r.headers.get("Content-Length") or 0)
+        received = 0
+        last_activity = time.time()
+        while True:
+            chunk = r.read(65536)
+            if not chunk:
+                break
+            f.write(chunk)
+            received += len(chunk)
+            now = time.time()
+            if now - last_activity > 120:
+                raise TimeoutError("下载停滞（120 秒无数据）")
+            last_activity = now
+        if total and received != total:
+            raise IOError(f"下载不完整：{received}/{total}")
 
 
 def main() -> int:
