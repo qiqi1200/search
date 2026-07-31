@@ -75,6 +75,11 @@ jobs:
           name: yanler-release-apk
           path: apk
 
+      - name: Rename APK with version tag
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          mv apk/app-release.apk "apk/yanler-${VER}-release.apk"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
