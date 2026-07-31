@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// 浏览器控制器接口 — 由 WebViewContainerState 实现
 ///
 /// 只暴露浏览器需要的几个导航动作，避免跨页面直接依赖 WebView 内部实现。
@@ -22,6 +24,9 @@ abstract class BrowserController {
 
   /// 在网页中执行 JS（AI Agent 网页操控用），返回结果字符串
   Future<String?> evaluateJavascript(String script);
+
+  /// 截取当前网页截图（AI Agent 看图用），返回 PNG 字节
+  Future<Uint8List?> takeScreenshot();
 }
 
 /// 导航总线 — 当前活动标签页 WebView 容器的全局句柄

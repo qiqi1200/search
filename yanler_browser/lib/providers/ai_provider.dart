@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../features/agent_bridge/agent_engine.dart';
+import '../features/agent_bridge/browser_tools.dart';
 
 /// 聊天会话 — 支持持久化保存/恢复
 class ChatSession {
@@ -45,11 +47,22 @@ class AIProvider extends ChangeNotifier {
   String _model = 'gpt-3.5-turbo';
   bool _agentMode = false;
   bool _isProcessing = false;
+  AgentAuthorizationMode _authMode = AgentAuthorizationMode.smart;
 
   // 会话
   List<ChatSession> _sessions = [];
   String? _activeSessionId;
   http.Client? _currentClient; // 当前请求句柄，用于中止
+
+  // Agent 引擎（工具循环）
+  AgentEngine? _activeEngine;
+  AgentStep? _currentStep;
+
+  /// 浏览器工具集（由聊天页注入）
+  BrowserTools? browserTools;
+
+  /// 授权确认回调（由聊天页注入弹窗）
+  Future<bool> Function(String description)? authorizeRequest;
 
   String get apiKey => _apiKey;
   String get apiUrl => _apiUrl;
@@ -57,6 +70,8 @@ class AIProvider extends ChangeNotifier {
   bool get agentMode => _agentMode;
   bool get isProcessing => _isProcessing;
   bool get isConfigured => _apiKey.isNotEmpty;
+  AgentAuthorizationMode get authMode => _authMode;
+  AgentStep? get currentStep => _currentStep;
 
   List<ChatSession> get sessions => List.unmodifiable(_sessions);
   ChatSession? get activeSession {
@@ -80,6 +95,10 @@ class AIProvider extends ChangeNotifier {
     _model = await _secureStorage.read(key: 'ai_model') ?? 'gpt-3.5-turbo';
     final prefs = await SharedPreferences.getInstance();
     _agentMode = prefs.getBool('ai_agent_mode') ?? false;
+    _authMode = AgentAuthorizationMode.values.firstWhere(
+      (m) => m.name == prefs.getString('ai_auth_mode'),
+      orElse: () => AgentAuthorizationMode.smart,
+    );
     _loadSessions(prefs);
     notifyListeners();
   }
@@ -107,6 +126,14 @@ class AIProvider extends ChangeNotifier {
     SharedPreferences.getInstance().then(
       (prefs) => prefs.setBool('ai_agent_mode', _agentMode),
     );
+    notifyListeners();
+  }
+
+  /// 设置授权模式（strict/smart/auto），持久化
+  Future<void> setAuthMode(AgentAuthorizationMode mode) async {
+    _authMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ai_auth_mode', mode.name);
     notifyListeners();
   }
 
@@ -178,10 +205,13 @@ class AIProvider extends ChangeNotifier {
 
   /// 用户可随时终止当前生成，终止指令优先级最高
   void stopGenerating() {
+    _activeEngine?.cancel();
+    _activeEngine = null;
     _currentClient?.close();
     _currentClient = null;
     if (_isProcessing) {
       _isProcessing = false;
+      _currentStep = null;
       notifyListeners();
     }
   }
@@ -217,7 +247,46 @@ class AIProvider extends ChangeNotifier {
     _isProcessing = true;
     notifyListeners();
 
+    // Agent 模式 + 浏览器工具已注入 → 走原生工具循环（function calling）
+    if (agentMode && browserTools != null) {
+      return _runAgentLoop(session, message);
+    }
+
     return _requestCompletion(session);
+  }
+
+  /// Agent 工具循环入口（可被 stopGenerating 中止）
+  Future<String> _runAgentLoop(ChatSession session, String userMessage) async {
+    final engine = AgentEngine(
+      apiUrl: _apiUrl,
+      apiKey: _apiKey,
+      model: _model,
+      tools: browserTools!,
+      history: session.messages,
+      authMode: _authMode,
+      authorize: authorizeRequest,
+      onStep: (step) {
+        _currentStep = step;
+        notifyListeners();
+      },
+    );
+    _activeEngine = engine;
+
+    try {
+      final reply = await engine.run(userMessage);
+      if (reply == '已停止生成') {
+        _appendAssistant('已停止生成');
+        return reply;
+      }
+      _isProcessing = false;
+      _appendAssistant(reply);
+      return reply;
+    } finally {
+      _isProcessing = false;
+      _activeEngine = null;
+      _currentStep = null;
+      notifyListeners();
+    }
   }
 
   /// Agent 网页操控结果回注：

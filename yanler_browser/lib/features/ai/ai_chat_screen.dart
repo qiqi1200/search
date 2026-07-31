@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/liquid_glass.dart';
 import '../../providers/ai_provider.dart';
+import '../../providers/browser_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../agent_bridge/agent_engine.dart';
+import '../agent_bridge/browser_tools.dart';
+import '../bookmarks/bookmark_service.dart';
+import '../history/history_service.dart';
 import 'ai_config_sheet.dart';
 import 'agent_commands.dart';
 
@@ -19,6 +25,23 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
   // AI 回复中的待执行命令（等待用户批准）
   List<String> _pendingCommands = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // 注入浏览器工具集与授权确认回调（Agent 工具循环用）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ai = context.read<AIProvider>();
+      ai.browserTools = BrowserTools(
+        browser: context.read<BrowserProvider>(),
+        settings: context.read<SettingsProvider>(),
+        bookmarks: context.read<BookmarkService>(),
+        history: context.read<HistoryService>(),
+      );
+      ai.authorizeRequest = (desc) => _confirmCommand('允许 AI 执行此操作？\n\n$desc');
+    });
+  }
 
   @override
   void dispose() {
@@ -50,6 +73,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
     final reply = await ai.sendMessage(text);
     if (!mounted) return;
+
+    // 工具循环模式：模型直接 function calling（授权已在循环内弹框），无需命令面板；
+    // 非工具循环模式：保留文本命令解析作为兼容
+    if (ai.agentMode && ai.browserTools != null) return;
 
     // 解析 Agent 命令，等待用户批准
     final commands = ai.extractCommands(reply);
@@ -210,6 +237,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
                     },
                   ),
           ),
+
+          // Agent 执行状态条（工具循环进行中）
+          if (ai.isProcessing && ai.currentStep != null)
+            _AgentStatusBar(step: ai.currentStep!, isDark: isDark),
 
           // 待执行命令面板（Agent 操作需用户批准）
           if (_pendingCommands.isNotEmpty)
@@ -578,6 +609,53 @@ class _EmptyChat extends StatelessWidget {
                   : '有问题随时问我。在右上角开启 Agent 模式后，我还能帮你操作浏览器。',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12.5, height: 1.6, color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Agent 工具循环状态条（思考中 / 正在执行工具）
+class _AgentStatusBar extends StatelessWidget {
+  final AgentStep step;
+  final bool isDark;
+
+  const _AgentStatusBar({required this.step, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final thinking = step.phase == 'thinking';
+    final color = Theme.of(context).colorScheme.primary;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.16 : 0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          if (thinking)
+            SizedBox(
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color),
+            )
+          else
+            Icon(Icons.bolt_rounded, size: 15, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              thinking
+                  ? 'AI 正在思考…'
+                  : '正在执行：${step.toolName}',
+              style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

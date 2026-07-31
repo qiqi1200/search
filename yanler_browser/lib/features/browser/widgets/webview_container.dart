@@ -164,6 +164,18 @@ class WebViewContainerState extends State<WebViewContainer>
     }
   }
 
+  /// 截取当前网页截图（AI Agent 看图用）
+  @override
+  Future<Uint8List?> takeScreenshot() async {
+    final c = _controller;
+    if (c == null) return null;
+    try {
+      return await c.takeScreenshot();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _doLoad(InAppWebViewController c, String url) async {
     if (url.isEmpty) return;
     _pendingUrl = null;
