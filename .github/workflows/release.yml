@@ -10,6 +10,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 defaults:
   run:
     working-directory: yanler_browser
@@ -76,7 +79,7 @@ jobs:
 
       - name: Zip build
         run: |
-          Compress-Archive -Path build/windows/runner/Release/* -DestinationPath Yanler-Windows-x64.zip
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Yanler-Windows-x64.zip
 
       - name: Upload to Release
         uses: svenstaro/upload-release-action@v2
