@@ -6,17 +6,21 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/wallpapers.dart';
 import '../../../core/utils/poem_database.dart';
 import '../../../core/widgets/liquid_glass.dart';
+import '../../../providers/ai_provider.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/quick_links_provider.dart';
 import '../../../providers/settings_provider.dart';
-import '../../search/search_service.dart';
+import '../../ai/agent_commands.dart';
 import '../../search/search_suggestions.dart';
 
 /// 新标签页 — Yanler 品牌 Logo 与诗词交叉淡化 + 打字机动画
 ///
 /// 视觉层：Outfit 品牌字标 / 思源宋体诗词 / 液态玻璃搜索框 / 快捷链接
 class NewTabPage extends StatefulWidget {
-  const NewTabPage({super.key});
+  /// 搜索提交回调（由 BrowserScreen 统一驱动导航）
+  final Future<void> Function(String query) onSearch;
+
+  const NewTabPage({super.key, required this.onSearch});
 
   @override
   State<NewTabPage> createState() => _NewTabPageState();
@@ -40,6 +44,10 @@ class _NewTabPageState extends State<NewTabPage>
   Timer? _typewriterTimer;
 
   final _random = Random();
+
+  // 搜索框直达 Agent 模式状态
+  String? _agentQuery;
+  UniqueKey? _agentRunKey;
 
   // 可配置时长（ms）
   static const int _logoDuration = 4000;
@@ -224,8 +232,11 @@ class _NewTabPageState extends State<NewTabPage>
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    theme.colorScheme.surface.withValues(alpha: 0.42),
-                    theme.colorScheme.surface.withValues(alpha: 0.52),
+                    theme.colorScheme.surface
+                        .withValues(alpha: settings.wallpaperOpacity),
+                    theme.colorScheme.surface.withValues(
+                      alpha: (settings.wallpaperOpacity + 0.1).clamp(0.0, 1.0),
+                    ),
                   ],
                 ),
               ),
@@ -277,6 +288,16 @@ class _NewTabPageState extends State<NewTabPage>
                 // 搜索框 — 液态玻璃
                 _SearchInput(onSubmit: _onSearch),
 
+                // 搜索框直达 Agent 模式面板
+                if (_agentQuery != null) ...[
+                  const SizedBox(height: 16),
+                  _AgentRunPanel(
+                    key: _agentRunKey,
+                    query: _agentQuery!,
+                    onClose: () => setState(() => _agentQuery = null),
+                  ),
+                ],
+
                 const SizedBox(height: 40),
 
                 // 快捷链接 — Speed Dial
@@ -294,8 +315,41 @@ class _NewTabPageState extends State<NewTabPage>
   }
 
   void _onSearch(String query) {
-    final searchService = SearchService();
-    searchService.openSearch(context, query);
+    // 搜索框直达 Agent 模式：Agent 模式下指令型输入直接触发 AI 执行，
+    // 无需跳转独立 AI 聊天页。
+    final ai = context.read<AIProvider>();
+    if (ai.agentMode && _isAgentCommand(query)) {
+      setState(() {
+        _agentRunKey = UniqueKey();
+        _agentQuery = query;
+      });
+      return;
+    }
+    // 常规搜索 / 网址：走统一导航
+    widget.onSearch(query);
+  }
+
+  /// 判定输入是否为 Agent 指令（而非普通搜索词/网址）
+  static bool _isAgentCommand(String input) {
+    final t = input.trim();
+    if (t.startsWith('/')) return true;
+    const triggers = [
+      '帮我',
+      '请帮我',
+      '打开',
+      '点一下',
+      '点击',
+      '输入',
+      '滚动',
+      '翻译',
+      '总结',
+      '介绍一下',
+      '查一下',
+      '搜一下',
+      '找到',
+      '找一下',
+    ];
+    return triggers.any((x) => t.contains(x));
   }
 }
 
@@ -632,6 +686,280 @@ class _SearchInputState extends State<_SearchInput> {
   }
 }
 
+/// 搜索框直达 Agent 模式面板 — 在首页直接运行 AI 指令并批准浏览器操作
+class _AgentRunPanel extends StatefulWidget {
+  final String query;
+  final VoidCallback onClose;
+
+  const _AgentRunPanel({super.key, required this.query, required this.onClose});
+
+  @override
+  State<_AgentRunPanel> createState() => _AgentRunPanelState();
+}
+
+class _AgentRunPanelState extends State<_AgentRunPanel> {
+  String _reply = '';
+  bool _loading = true;
+  List<String> _commands = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    final ai = context.read<AIProvider>();
+    setState(() => _loading = true);
+    final reply = await ai.sendMessage(widget.query);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _reply = reply;
+      _commands = ai.extractCommands(reply);
+    });
+  }
+
+  Future<void> _approve() async {
+    final ai = context.read<AIProvider>();
+    final cmds = List.of(_commands);
+    setState(() => _commands = []);
+    final countBefore = ai.messages.length;
+    for (final c in cmds) {
+      await executeAgentCommand(
+        context,
+        c,
+        confirm: _confirm,
+        toast: _toast,
+      );
+    }
+    // 网页操控命令会回传真实结果让 AI 继续决策，提取下一轮命令
+    if (mounted && ai.messages.length > countBefore) {
+      final latest = ai.messages.last['content'] ?? '';
+      setState(() {
+        _reply = latest;
+        _commands = ai.extractCommands(latest);
+      });
+    }
+  }
+
+  Future<bool> _confirm(String desc) async {
+    if (!mounted) return false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('AI 请求执行操作'),
+        content: Text(desc),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('拒绝'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('允许'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return LiquidGlass(
+      borderRadius: BorderRadius.circular(20),
+      blur: 24,
+      opacity: isDark ? 0.5 : 0.55,
+      borderWidth: 1,
+      shadows: GlassTokens.softShadow(isDark),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: const Text(
+                      'Agent',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '正在执行：${widget.query}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: widget.onClose,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 17,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // 回复内容
+              if (_loading)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.8,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'AI 思考中…',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 140),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      _reply,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.55,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 待批准命令
+              if (_commands.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHigh
+                        .withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AI 请求执行 ${_commands.length} 项浏览器操作：',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ..._commands.take(3).map(
+                            (c) => Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                c,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: theme.colorScheme.primary,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                          ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () =>
+                                setState(() => _commands = []),
+                            child: const Text('忽略'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF5B7FFF),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                            ),
+                            onPressed: _approve,
+                            child: const Text('批准执行'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 快捷链接区 — Speed Dial（Vivaldi / Chrome 同款）
 class _QuickLinksSection extends StatelessWidget {
   const _QuickLinksSection();
@@ -693,10 +1021,6 @@ class _QuickLinksSection extends StatelessWidget {
                 onLongPress: () => _confirmRemove(context, quickLinks, link),
               );
             }),
-            _AddTile(
-              width: tileWidth,
-              onTap: () => _showAddDialog(context, quickLinks),
-            ),
           ],
         ),
       ],
@@ -724,58 +1048,6 @@ class _QuickLinksSection extends StatelessWidget {
               Navigator.pop(dialogContext);
             },
             child: const Text('移除', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddDialog(BuildContext context, QuickLinksProvider quickLinks) {
-    final titleController = TextEditingController();
-    final urlController = TextEditingController();
-    final theme = Theme.of(context);
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('添加快捷链接'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: titleController,
-              decoration: const InputDecoration(
-                labelText: '名称',
-                hintText: '例如：知乎',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(
-                labelText: '网址',
-                hintText: 'https://example.com',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.url,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () {
-              final url = urlController.text.trim();
-              if (url.isEmpty) return;
-              final normalized = url.contains('.') ? url : 'https://$url';
-              quickLinks.add(titleController.text, normalized);
-              Navigator.pop(dialogContext);
-            },
-            child: Text('添加', style: TextStyle(color: theme.colorScheme.primary)),
           ),
         ],
       ),
@@ -858,53 +1130,3 @@ class _QuickLinkTile extends StatelessWidget {
   }
 }
 
-/// 添加磁贴
-class _AddTile extends StatelessWidget {
-  final double width;
-  final VoidCallback onTap;
-
-  const _AddTile({required this.width, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return SizedBox(
-      width: width,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHigh
-                    .withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: theme.colorScheme.outline.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Icon(
-                Icons.add_rounded,
-                size: 22,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              '添加',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: theme.colorScheme.onSurfaceVariant
-                    .withValues(alpha: 0.8),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

@@ -35,9 +35,41 @@ class UpdateService {
   UpdateService._();
 
   static const String _repo = 'qiqi1200/search';
-  static const String _apiUrl =
-      'https://api.github.com/repos/$_repo/releases/latest';
+  static const String _apiPath = 'https://api.github.com/repos/$_repo/releases/latest';
   static const Duration _timeout = Duration(seconds: 12);
+
+  /// GitHub 加速镜像（校园网/直连不稳时回退，与本地 sync 脚本保持一致）
+  static const List<String> _mirrors = [
+    'https://ghfast.top/',
+    'https://gh-proxy.com/',
+  ];
+
+  /// 依次尝试直连与各镜像，返回第一个成功响应；全部失败抛异常。
+  static Future<http.Response> _getWithMirror(Uri uri) async {
+    final urls = [
+      uri,
+      for (final m in _mirrors) Uri.parse('$m${uri.toString()}'),
+    ];
+    Object? lastErr;
+    for (final u in urls) {
+      try {
+        final resp = await http
+            .get(
+              u,
+              headers: {
+                'User-Agent': 'Yanler-Browser',
+                'Accept': 'application/vnd.github+json',
+              },
+            )
+            .timeout(_timeout);
+        if (resp.statusCode == 200) return resp;
+        lastErr = 'HTTP ${resp.statusCode}';
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw Exception(lastErr.toString());
+  }
 
   /// 检查最新 Release。返回 null 表示无更新或检查失败（error 区分原因）。
   static Future<UpdateCheckResult> checkForUpdates() async {
@@ -45,16 +77,7 @@ class UpdateService {
       final pkg = await PackageInfo.fromPlatform();
       final current = pkg.version;
 
-      final resp = await http
-          .get(
-            Uri.parse(_apiUrl),
-            headers: {'User-Agent': 'Yanler-Browser', 'Accept': 'application/vnd.github+json'},
-          )
-          .timeout(_timeout);
-
-      if (resp.statusCode != 200) {
-        return UpdateCheckResult(error: '服务器响应异常（HTTP ${resp.statusCode}）');
-      }
+      final resp = await _getWithMirror(Uri.parse(_apiPath));
 
       final data = jsonDecode(resp.body) as Map<String, dynamic>;
       final tag = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
@@ -119,19 +142,45 @@ class UpdateService {
   }
 
   /// 下载 APK 并调起系统安装器。返回 null 表示成功。
+  ///
+  /// 依次尝试直连与 GitHub 加速镜像，任一成功即安装。
   static Future<String?> downloadAndInstall(
     String url, {
     ValueChanged<double>? onProgress,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
     final file = File('${dir.path}/yanler-update.apk');
+
+    final urls = [url, for (final m in _mirrors) '$m$url'];
+    Object? lastErr;
+    for (final u in urls) {
+      final err = await _downloadToFile(Uri.parse(u), file, onProgress);
+      if (err == null) {
+        // 调起系统安装器（open_filex 内部处理 FileProvider）
+        final result = await OpenFilex.open(file.path);
+        if (result.type != ResultType.done) {
+          return '无法打开安装器：${result.message}';
+        }
+        return null;
+      }
+      lastErr = err;
+    }
+    return '下载失败：$lastErr';
+  }
+
+  /// 单个源下载到文件，成功返回 null，失败返回原因字符串
+  static Future<String?> _downloadToFile(
+    Uri uri,
+    File file,
+    ValueChanged<double>? onProgress,
+  ) async {
     final client = http.Client();
     try {
-      final request = http.Request('GET', Uri.parse(url))
+      final request = http.Request('GET', uri)
         ..headers['User-Agent'] = 'Yanler-Browser';
       final resp = await client.send(request).timeout(_timeout * 5);
       if (resp.statusCode != 200) {
-        return '下载失败（HTTP ${resp.statusCode}）';
+        return 'HTTP ${resp.statusCode}';
       }
 
       final total = resp.contentLength ?? 0;
@@ -147,15 +196,9 @@ class UpdateService {
       } finally {
         await sink.close();
       }
-
-      // 调起系统安装器（open_filex 内部处理 FileProvider）
-      final result = await OpenFilex.open(file.path);
-      if (result.type != ResultType.done) {
-        return '无法打开安装器：${result.message}';
-      }
       return null;
     } catch (e) {
-      return '下载失败：$e';
+      return e.toString();
     } finally {
       client.close();
     }

@@ -13,6 +13,10 @@ class SettingsProvider extends ChangeNotifier {
   String _wallpaperId = 'default';
   String _customWallpaperPath = '';
 
+  // 通透度自定义：壁纸遮罩不透明度 / 液态玻璃磨砂层透明度
+  double _wallpaperOpacity = 0.45;
+  double _glassOpacity = 1.0;
+
   ThemeMode get themeMode => _themeMode;
   String get searchEngine => _searchEngine;
   bool get adblockEnabled => _adblockEnabled;
@@ -24,6 +28,12 @@ class SettingsProvider extends ChangeNotifier {
   String get wallpaperId => _wallpaperId;
   String get customWallpaperPath => _customWallpaperPath;
   bool get hasCustomWallpaper => _customWallpaperPath.isNotEmpty;
+
+  /// 壁纸遮罩不透明度（0~1，越大遮罩越实、壁纸越淡）
+  double get wallpaperOpacity => _wallpaperOpacity;
+
+  /// 液态玻璃磨砂层透明度倍率（0~1，越小玻璃越通透）
+  double get glassOpacity => _glassOpacity;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
@@ -45,6 +55,8 @@ class SettingsProvider extends ChangeNotifier {
     _fontSize = prefs.getDouble('fontSize') ?? 1.0;
     _wallpaperId = prefs.getString('wallpaperId') ?? 'default';
     _customWallpaperPath = prefs.getString('customWallpaperPath') ?? '';
+    _wallpaperOpacity = prefs.getDouble('wallpaperOpacity') ?? 0.45;
+    _glassOpacity = prefs.getDouble('glassOpacity') ?? 1.0;
     notifyListeners();
   }
 
@@ -100,6 +112,22 @@ class SettingsProvider extends ChangeNotifier {
     _themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('darkMode', mode == ThemeMode.dark);
+    notifyListeners();
+  }
+
+  /// 壁纸遮罩不透明度（0~1）
+  Future<void> setWallpaperOpacity(double value) async {
+    _wallpaperOpacity = value.clamp(0.0, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('wallpaperOpacity', _wallpaperOpacity);
+    notifyListeners();
+  }
+
+  /// 液态玻璃磨砂层透明度倍率（0~1）
+  Future<void> setGlassOpacity(double value) async {
+    _glassOpacity = value.clamp(0.0, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('glassOpacity', _glassOpacity);
     notifyListeners();
   }
 }

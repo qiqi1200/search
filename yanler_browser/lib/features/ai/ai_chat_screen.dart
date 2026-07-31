@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/liquid_glass.dart';
-import '../../core/constants/search_engines.dart';
 import '../../providers/ai_provider.dart';
-import '../../providers/browser_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../bookmarks/bookmark_service.dart';
-import '../history/history_service.dart';
 import 'ai_config_sheet.dart';
+import 'agent_commands.dart';
 
 /// AI 聊天界面 — 会话历史持久化、可中止生成、Agent 命令经用户确认后执行
 class AIChatScreen extends StatefulWidget {
@@ -85,125 +81,13 @@ class _AIChatScreenState extends State<AIChatScreen> {
     return ok ?? false;
   }
 
+  /// 执行 Agent 命令（与首页搜索框直达模式共用同一套执行器）
   Future<void> _executeCommand(String cmd) async {
-    final match = RegExp(r'\[(\w+):?\s*(.*?)\]').firstMatch(cmd);
-    if (match == null) return;
-    final type = match.group(1)!.toUpperCase();
-    final arg = (match.group(2) ?? '').trim();
-
-    final settings = context.read<SettingsProvider>();
-    final browser = context.read<BrowserProvider>();
-    final bookmarks = context.read<BookmarkService>();
-    final history = context.read<HistoryService>();
-
-    switch (type) {
-      case 'SEARCH':
-        if (await _confirmCommand('搜索：$arg')) {
-          // 直接驱动浏览器搜索（不依赖 context，规避 async 间隙）
-          final engine = SearchEngines.byName(settings.searchEngine);
-          if (browser.activeTabIndex >= 0) {
-            browser.updateTabUrl(
-              browser.activeTabIndex,
-              '${engine.url}${Uri.encodeComponent(arg)}',
-            );
-          }
-        }
-      case 'OPEN_URL':
-      case 'NEW_TAB':
-        if (await _confirmCommand('打开网页：$arg')) {
-          browser.addTab(url: arg);
-        }
-      case 'BOOKMARK_ADD':
-        final parts = arg.split(',').map((s) => s.trim()).toList();
-        if (parts.length >= 2 && await _confirmCommand('添加书签：${parts[0]}')) {
-          bookmarks.add(parts[0], parts[1]);
-          _toast('书签已添加');
-        }
-      case 'BOOKMARK_LIST':
-        if (await _confirmCommand('查看书签列表')) {
-          _showBookmarkList(bookmarks);
-        }
-      case 'BOOKMARK_DELETE':
-        if (await _confirmCommand('删除书签：$arg')) {
-          bookmarks.remove(arg);
-          _toast('书签已删除');
-        }
-      case 'HISTORY_CLEAR':
-        if (await _confirmCommand('清空全部浏览历史')) {
-          history.clear();
-          _toast('历史已清空');
-        }
-      case 'SETTING':
-        final parts = arg.split(',').map((s) => s.trim()).toList();
-        if (parts.length >= 2 && await _confirmCommand('修改设置：${parts[0]} → ${parts[1]}')) {
-          await _applySetting(settings, parts[0], parts[1]);
-        }
-      case 'ADBLOCK_TOGGLE':
-        if (await _confirmCommand('切换广告过滤')) {
-          settings.setAdblockEnabled(!settings.adblockEnabled);
-          _toast('广告过滤已${settings.adblockEnabled ? '开启' : '关闭'}');
-        }
-      case 'THEME_TOGGLE':
-        if (await _confirmCommand('切换深浅主题')) {
-          settings.toggleTheme();
-        }
-      case 'CLOSE_TAB':
-        if (await _confirmCommand('关闭标签页：$arg')) {
-          final idx = browser.tabs.indexWhere(
-            (t) => t.id == arg || t.title.contains(arg),
-          );
-          if (idx >= 0) browser.closeTab(idx);
-        }
-    }
-  }
-
-  Future<void> _applySetting(
-    SettingsProvider settings,
-    String key,
-    String value,
-  ) async {
-    final k = key.toLowerCase();
-    if (k.contains('engine')) {
-      settings.setSearchEngine(value);
-      _toast('搜索引擎已切换为 $value');
-    } else if (k.contains('theme') || k.contains('dark')) {
-      settings.setThemeMode(value.contains('dark') ? ThemeMode.dark : ThemeMode.light);
-    } else if (k.contains('adblock')) {
-      settings.setAdblockEnabled(value == 'true' || value == '1');
-    }
-  }
-
-  void _showBookmarkList(BookmarkService bookmarks) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('当前书签'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: bookmarks.count == 0
-              ? const Text('暂无书签')
-              : ListView(
-                  shrinkWrap: true,
-                  children: bookmarks.bookmarks
-                      .map((b) => ListTile(
-                            dense: true,
-                            title: Text(b.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(b.url, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            onTap: () {
-                              Navigator.pop(dialogContext);
-                              context.read<BrowserProvider>().addTab(url: b.url);
-                            },
-                          ))
-                      .toList(),
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
+    await executeAgentCommand(
+      context,
+      cmd,
+      confirm: _confirmCommand,
+      toast: _toast,
     );
   }
 
@@ -393,9 +277,18 @@ class _AIChatScreenState extends State<AIChatScreen> {
                         onPressed: () async {
                           final cmds = List.of(_pendingCommands);
                           setState(() => _pendingCommands = []);
+                          final msgCountBefore = ai.messages.length;
                           for (final c in cmds) {
                             await _executeCommand(c);
                           }
+                          // 网页操控命令会回传真实结果让 AI 继续决策；
+                          // 仅在 AI 产出了新回复时提取下一轮命令，等待用户再次批准。
+                          if (mounted && ai.messages.length > msgCountBefore) {
+                            final latest = ai.messages.last['content'] ?? '';
+                            final newCmds = ai.extractCommands(latest);
+                            setState(() => _pendingCommands = newCmds);
+                          }
+                          _scrollToBottom();
                         },
                         child: const Text('批准执行'),
                       ),

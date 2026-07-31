@@ -1,23 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../core/constants/search_engines.dart';
-import '../../providers/settings_provider.dart';
-import '../../providers/browser_provider.dart';
 
+/// 搜索输入规范化 — 判断输入是网址还是关键词，归一为可加载的完整 URL。
+///
+/// 所有导航入口（地址栏 / 首页搜索 / 联想点击 / AI 操作）共用此逻辑，
+/// 保证「关键词 → 搜索引擎 URL」「域名 → https:// 前缀」行为完全一致。
 class SearchService {
-  /// 直接打开搜索
-  void openSearch(BuildContext context, String query) {
-    final settings = context.read<SettingsProvider>();
-    final browser = context.read<BrowserProvider>();
-    final engine = SearchEngines.byName(settings.searchEngine);
-    final searchUrl = '${engine.url}${Uri.encodeComponent(query)}';
+  SearchService._();
 
-    if (browser.activeTabIndex >= 0) {
-      browser.updateTabUrl(browser.activeTabIndex, searchUrl);
-    }
-  }
-
-  /// 判断输入是搜索词还是URL
+  /// 判断输入是搜索词还是 URL
   static String normalizeInput(String input, String searchEngineName) {
     final trimmed = input.trim();
 
@@ -28,7 +18,7 @@ class SearchService {
       return trimmed;
     }
 
-    // 包含 . 可能是域名（如 google.com）
+    // 包含 . 可能是域名（如 google.com、example.com.cn）
     if (trimmed.contains('.') && !trimmed.contains(' ')) {
       return 'https://$trimmed';
     }

@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/settings_provider.dart';
 
 /// LiquidGlass — 液态玻璃表面组件
 ///
@@ -69,6 +71,11 @@ class LiquidGlass extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final radius = borderRadius ?? BorderRadius.circular(16);
 
+    // 全局磨砂透明度倍率（设置页滑块可调）：
+    // 最终底色不透明度 = 组件自带 opacity × 用户倍率
+    final glassMul = context.watch<SettingsProvider>().glassOpacity.clamp(0.0, 1.0);
+    final effectiveOpacity = (opacity * glassMul).clamp(0.0, 1.0);
+
     final Color baseTint = tint ?? theme.colorScheme.surface;
     // 通透度优化：浅色模式用纯白底（避免暖灰底色导致「发灰」），
     // 深色模式略微提亮底色；不透明度整体下调，让背景透出来。
@@ -88,10 +95,10 @@ class LiquidGlass extends StatelessWidget {
               child: Container(color: Colors.transparent),
             ),
           ),
-          // 2. 半透明底色
+          // 2. 半透明底色（应用全局磨砂透明度倍率）
           Positioned.fill(
             child: Container(
-              color: fill.withValues(alpha: opacity),
+              color: fill.withValues(alpha: effectiveOpacity),
             ),
           ),
           // 3. 噪点纹理（折射颗粒感）— 更轻，避免发灰
@@ -100,10 +107,10 @@ class LiquidGlass extends StatelessWidget {
               child: CustomPaint(
                 painter: _NoisePainter(
                   seed: 260607,
-                  density: isDark ? 0.035 : 0.022,
+                  density: isDark ? 0.026 : 0.014,
                   color: isDark
-                      ? Colors.white.withValues(alpha: 0.035)
-                      : Colors.black.withValues(alpha: 0.02),
+                      ? Colors.white.withValues(alpha: 0.03)
+                      : Colors.black.withValues(alpha: 0.015),
                   pointSize: 1.0,
                 ),
               ),

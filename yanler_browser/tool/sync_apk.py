@@ -41,17 +41,24 @@ def log(msg: str, notify: bool = True) -> None:
         pass
 
 
-def fetch_json(url: str, timeout: int = 20) -> dict:
-    req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
-
-
 MIRRORS = [
     # 国内加速镜像（仅作为直连失败/卡顿时的回退）
     "https://gh-proxy.com/",
     "https://ghfast.top/",
 ]
+
+
+def fetch_json(url: str, timeout: int = 20) -> dict:
+    """直连优先，失败时回退到加速镜像（与 download 一致）。"""
+    last_err: Exception = RuntimeError("no api source")
+    for src in [url] + [m + url for m in MIRRORS]:
+        try:
+            req = urllib.request.Request(src, headers=UA)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:
+            last_err = e
+    raise last_err
 
 
 def download(url: str, dest: str) -> None:

@@ -187,7 +187,6 @@ class AIProvider extends ChangeNotifier {
   }
 
   /// 向 AI 发送消息（支持代理模式；可被 stopGenerating 中止）
-  /// 向 AI 发送消息（支持代理模式；可被 stopGenerating 中止）
   ///
   /// 无论成功、失败、未配置还是被中止，都会把「用户消息 + AI 回复」
   /// 追加到当前会话中，保证聊天界面始终有完整反馈。
@@ -218,6 +217,39 @@ class AIProvider extends ChangeNotifier {
     _isProcessing = true;
     notifyListeners();
 
+    return _requestCompletion(session);
+  }
+
+  /// Agent 网页操控结果回注：
+  /// 将 PAGE_INFO / CLICK / TYPE / SCROLL 的真实执行结果注入会话，
+  /// 让 AI 基于真实页面继续「搜索→定位→执行」全链路任务。
+  Future<String> continueWithToolResult(String result) async {
+    if (_isProcessing) {
+      stopGenerating();
+    }
+
+    final session = activeSession ?? _newSession();
+    session.messages.add({
+      'role': 'user',
+      'content':
+          '[网页/操作结果]\n$result\n\n请根据以上真实结果继续你的任务。'
+              '如需点击、输入、滚动、搜索或打开网页，请以命令格式输出（每行一个）。'
+              '若任务已全部完成，请用一句话总结成果即可。',
+    });
+    session.updatedAt = DateTime.now();
+    _persistSessions();
+    notifyListeners();
+
+    if (!isConfigured) return '未配置 AI 服务';
+
+    _isProcessing = true;
+    notifyListeners();
+
+    return _requestCompletion(session);
+  }
+
+  /// 发起一次 LLM 补全请求（sendMessage / continueWithToolResult 共用）
+  Future<String> _requestCompletion(ChatSession session) async {
     final systemPrompt = _agentMode
         ? _buildAgentSystemPrompt()
         : '你是一个友好的 AI 助手，帮助用户解答问题。请用中文回复。';
@@ -309,34 +341,36 @@ class AIProvider extends ChangeNotifier {
   /// 构建 AI 代理的系统提示 — 用户拥有最高控制权
   String _buildAgentSystemPrompt() {
     return '''
-你是 Yanler 浏览器的内置 AI 代理助手。
+你是 Yanler 浏览器的内置 AI 代理助手，可以操控浏览器完成「搜索→定位目标→执行操作」的全链路任务。
 
 【最高原则】用户拥有最高控制权：
 - 你的所有浏览器操作都必须以命令形式输出，由前端弹出确认框交给用户批准；
 - 用户随时可以停止你的任务，用户的终止指令优先于一切；
 - 未经用户明确要求，不得执行任何修改类操作（删除、关闭、清空等）。
 
-你的能力包括：
-1. 搜索：帮用户搜索网页内容
-2. 书签管理：添加、删除、查看书签
-3. 历史记录：查看和清除浏览历史
-4. 标签管理：打开新标签、切换标签、关闭标签
-5. 设置管理：更改搜索引擎、主题、隐私设置等
-6. 广告过滤：开关广告过滤功能
+【网页操控能力】
+你可以读取当前网页、点击元素、输入文字、滚动页面：
+1. 需要了解当前页面时，输出 [PAGE_INFO]，执行结果会作为真实页面信息回传给你；
+2. 定位并点击元素时，输出 [CLICK: 元素文本或CSS选择器]，例如 [CLICK: 搜索];
+   （优先使用页面回传的链接文本/按钮文字，更精确）
+3. 向输入框填字时，输出 [TYPE: 输入框占位符或选择器, 要输入的文字]；
+4. 滚动页面时，输出 [SCROLL: down|up|top|bottom]；
+5. 高级操作可输出 [JS: 任意JavaScript表达式]，结果为 JSON。
+
+【任务执行策略】
+- 分步执行：一次只输出下一步需要的 1~2 个命令；
+- 搜索类任务流程：先 [SEARCH: 关键词] 打开结果页 → 再 [PAGE_INFO] 读取结果 →
+  根据结果 [CLICK: 目标链接] 或继续调整；
+- 每步执行结果都会回传给你，请基于真实结果继续，不要凭空猜测页面内容；
+- 任务完成后用一句话总结成果，不要继续输出命令。
+
+【其他能力】
+- 书签管理：[BOOKMARK_ADD: 标题, url]、[BOOKMARK_LIST]、[BOOKMARK_DELETE: 书签id]
+- 历史记录：[HISTORY_CLEAR]
+- 标签管理：[NEW_TAB: url]、[OPEN_URL: url]、[CLOSE_TAB: tab_id]
+- 设置管理：[SETTING: 设置项, 值]、[ADBLOCK_TOGGLE]、[THEME_TOGGLE]
 
 请用中文回复，风格简洁友好。
-执行浏览器操作时，请输出以下可执行命令格式（每行一个）：
-- [SEARCH: 查询内容]
-- [OPEN_URL: https://...]
-- [NEW_TAB: url]
-- [CLOSE_TAB: tab_id]
-- [BOOKMARK_ADD: 标题, url]
-- [BOOKMARK_LIST]
-- [BOOKMARK_DELETE: 书签id]
-- [HISTORY_CLEAR]
-- [SETTING: 设置项, 值]
-- [ADBLOCK_TOGGLE]
-- [THEME_TOGGLE]
 ''';
   }
 

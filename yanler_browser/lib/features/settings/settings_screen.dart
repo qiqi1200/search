@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/ai_provider.dart';
+import '../../providers/quick_links_provider.dart';
 import '../../core/constants/search_engines.dart';
 import '../../core/constants/wallpapers.dart';
 import '../../core/widgets/liquid_glass.dart';
@@ -36,6 +37,8 @@ class SettingsScreen extends StatelessWidget {
           _PrivacySection(),
           SizedBox(height: 16),
           _AppearanceSection(),
+          SizedBox(height: 16),
+          _QuickLinksSection(),
           SizedBox(height: 16),
           _AISection(),
           SizedBox(height: 16),
@@ -108,35 +111,63 @@ class _SearchSection extends StatelessWidget {
   }
 
   void _showEnginePicker(BuildContext context, SettingsProvider settings) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
-      builder: (_) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('选择搜索引擎',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 16),
-            ...SearchEngines.engines.map(
-              (engine) => ListTile(
-                leading: Image.network(
-                  engine.iconUrl,
-                  width: 24,
-                  height: 24,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.search),
-                ),
-                title: Text(engine.name),
-                trailing: settings.searchEngine == engine.name
-                    ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary)
-                    : null,
-                onTap: () {
-                  settings.setSearchEngine(engine.name);
-                  Navigator.pop(context);
-                },
-              ),
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => LiquidGlass(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        blur: 28,
+        opacity: isDark ? 0.5 : 0.45,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: 14,
+              bottom: 12,
+              left: 8,
+              right: 8,
             ),
-          ],
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant
+                        .withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text('选择搜索引擎',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                ...SearchEngines.engines.map(
+                  (engine) => ListTile(
+                    leading: Image.network(
+                      engine.iconUrl,
+                      width: 24,
+                      height: 24,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.search),
+                    ),
+                    title: Text(engine.name),
+                    trailing: settings.searchEngine == engine.name
+                        ? Icon(Icons.check,
+                            color: Theme.of(context).colorScheme.primary)
+                        : null,
+                    onTap: () {
+                      settings.setSearchEngine(engine.name);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -200,6 +231,28 @@ class _AppearanceSection extends StatelessWidget {
           label: '壁纸',
           value: _wallpaperName(settings),
           onTap: () => _showWallpaperPicker(context, settings),
+        ),
+        const _Divider(),
+        // 壁纸通透度：遮罩不透明度越小 → 背景壁纸越清晰
+        _SliderRow(
+          label: '背景通透度',
+          hint: '壁纸遮罩不透明度',
+          value: settings.wallpaperOpacity,
+          min: 0.0,
+          max: 0.85,
+          format: (v) => '${(v * 100).round()}%',
+          onChanged: (v) => settings.setWallpaperOpacity(v),
+        ),
+        const _Divider(),
+        // 液态玻璃磨砂层透明度：越小玻璃越通透
+        _SliderRow(
+          label: '玻璃通透度',
+          hint: '磨砂层透明度',
+          value: settings.glassOpacity,
+          min: 0.0,
+          max: 1.0,
+          format: (v) => '${(v * 100).round()}%',
+          onChanged: (v) => settings.setGlassOpacity(v),
         ),
       ],
     );
@@ -395,6 +448,141 @@ class _AISection extends StatelessWidget {
     );
   }
 }
+/// 快捷链接管理 — 首页快捷方式的管理入口（首页已移除「+ 添加」磁贴）
+class _QuickLinksSection extends StatelessWidget {
+  const _QuickLinksSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final quickLinks = context.watch<QuickLinksProvider>();
+
+    return _SettingsCard(
+      title: '快捷链接',
+      icon: Icons.grid_view_rounded,
+      trailing: TextButton.icon(
+        icon: const Icon(Icons.add_rounded, size: 17),
+        label: const Text('添加'),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+        onPressed: () => _showAddDialog(context, quickLinks),
+      ),
+      children: quickLinks.links.isEmpty
+          ? [
+              Text(
+                '暂无快捷链接，点右上角「添加」创建首页快捷方式。',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ]
+          : quickLinks.links
+              .map(
+                (link) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                      ),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Text(
+                        link.title.characters.first.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    link.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    link.url,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 17),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    onPressed: () => quickLinks.remove(link.id),
+                  ),
+                ),
+              )
+              .toList(),
+    );
+  }
+
+  void _showAddDialog(BuildContext context, QuickLinksProvider quickLinks) {
+    final titleController = TextEditingController();
+    final urlController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('添加快捷链接'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                labelText: '名称',
+                hintText: '例如：知乎',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: '网址',
+                hintText: 'https://example.com',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.url,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+              final normalized = url.contains('.') ? url : 'https://$url';
+              quickLinks.add(titleController.text, normalized);
+              Navigator.pop(dialogContext);
+            },
+            child: Text(
+              '添加',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DataSection extends StatelessWidget {
   const _DataSection();
 
@@ -459,11 +647,13 @@ class _DataSection extends StatelessWidget {
 class _SettingsCard extends StatelessWidget {
   final String title;
   final IconData icon;
+  final Widget? trailing;
   final List<Widget> children;
 
   const _SettingsCard({
     required this.title,
     required this.icon,
+    this.trailing,
     required this.children,
   });
 
@@ -487,7 +677,10 @@ class _SettingsCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 18, color: theme.colorScheme.primary),
                 const SizedBox(width: 8),
-                Text(title, style: theme.textTheme.titleSmall),
+                Expanded(
+                  child: Text(title, style: theme.textTheme.titleSmall),
+                ),
+                if (trailing != null) trailing!,
               ],
             ),
             const SizedBox(height: 12),
@@ -561,6 +754,78 @@ class _SwitchRow extends StatelessWidget {
       title: Text(label),
       subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
       trailing: Switch(value: value, onChanged: onChanged),
+    );
+  }
+}
+
+/// 滑块设置项（通透度调节等）
+class _SliderRow extends StatelessWidget {
+  final String label;
+  final String hint;
+  final double value;
+  final double min;
+  final double max;
+  final String Function(double) format;
+  final ValueChanged<double> onChanged;
+
+  const _SliderRow({
+    required this.label,
+    required this.hint,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.format,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 14.5),
+              ),
+            ),
+            Text(
+              format(value),
+              style: TextStyle(
+                fontSize: 12.5,
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          hint,
+          style: TextStyle(
+            fontSize: 11.5,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+          ),
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            activeColor: theme.colorScheme.primary,
+            inactiveColor: theme.colorScheme.outlineVariant,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,12 +1,14 @@
-name: Release APK & Windows
+name: Auto Release APK
 
 on:
+  push:
+    tags: ['v*']
   release:
-    types: [ published ]
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.0.1)'
+        description: 'Release version (e.g. v1.3.0)'
         required: true
         type: string
 
@@ -19,7 +21,7 @@ defaults:
 
 jobs:
   build_apk:
-    name: Build & Upload APK
+    name: Build & Publish APK
     runs-on: ubuntu-latest
     env:
       YANLER_MAVEN_MIRROR: 'false'
@@ -35,33 +37,73 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build APK (all ABIs)
-        run: flutter build apk --release --split-per-abi
+      - name: Prepare release signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > android/key.jks
+            echo "storeFile=../key.jks" > android/key.properties
+            echo "storePassword=$KEYSTORE_PASSWORD" >> android/key.properties
+            echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+            echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
+            echo "::notice::Release signing configured"
+          else
+            echo "::warning::未配置 ANDROID_KEYSTORE_BASE64 密钥，本次使用 debug 签名（覆盖安装正式签名版将失败）。请在仓库 Settings → Secrets 配置后重打 tag。"
+          fi
+
+      - name: Verify
+        run: flutter analyze
 
       - name: Build universal APK
         run: flutter build apk --release
 
-      - name: Upload to Release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: yanler_browser/build/app/outputs/flutter-apk/app-release.apk
-          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}.apk
-          tag: ${{ github.event.inputs.version || github.ref_name }}
-          overwrite: true
+      # 计算 Release 标签与版本号（push tag / 手动创建 tag / 已有 Release）
+      - name: Compute release tag & version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            INPUT="${{ github.event.inputs.version }}"
+            git config user.name "github-actions"
+            git config user.email "github-actions@users.noreply.github.com"
+            git tag "v$INPUT"
+            git push origin "v$INPUT"
+            TAG="v$INPUT"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload split APKs to Release
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: yanler_browser/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-armv7a.apk
-          tag: ${{ github.event.inputs.version || github.ref_name }}
-          overwrite: true
+      - name: Stage APK assets
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          mkdir -p release_assets
+          cp build/app/outputs/flutter-apk/app-release.apk "release_assets/Yanler-${VER}.apk"
 
+      # 自动创建/更新 Release 并上传通用 APK（应用内更新检查 latest 即取此包）
+      - name: Create / Update Release & Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: Yanler ${{ steps.ver.outputs.tag }}
+          body: |
+            自动构建发布 — Yanler ${{ steps.ver.outputs.tag }}
+
+            - 通用 APK（所有 ABI）：`Yanler-${{ steps.ver.outputs.ver }}.apk`
+            - 应用内更新会自动检测并下载本包
+          files: yanler_browser/release_assets/*.apk
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+
+  # 可选：Windows 构建发布
   build_windows:
     name: Build & Upload Windows
     runs-on: windows-2022
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -82,10 +124,8 @@ jobs:
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath Yanler-Windows-x64.zip
 
       - name: Upload to Release
-        uses: svenstaro/upload-release-action@v2
+        uses: softprops/action-gh-release@v2
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: yanler_browser/Yanler-Windows-x64.zip
-          asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-windows-x64.zip
-          tag: ${{ github.event.inputs.version || github.ref_name }}
-          overwrite: true
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          files: yanler_browser/Yanler-Windows-x64.zip
+          fail_on_unmatched_files: false

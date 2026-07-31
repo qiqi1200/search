@@ -40,7 +40,8 @@ class BottomBar extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     return LiquidGlass(
-      borderRadius: BorderRadius.zero,
+      // 顶部圆角，与全局玻璃风格统一
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
       blur: 28,
       opacity: isDark ? 0.34 : 0.36,
       borderWidth: 0.8,

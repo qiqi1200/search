@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import '../../../core/utils/nav_bus.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/ai_provider.dart';
 import '../../../providers/settings_provider.dart';
-import '../../../core/constants/search_engines.dart';
+import '../../search/search_service.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
 import '../../ai/ai_chat_screen.dart';
@@ -32,10 +32,10 @@ class _BrowserScreenState extends State<BrowserScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final ScrollController _scrollController = ScrollController();
-  InAppWebViewController? _webViewController;
   bool _canGoBack = false;
   bool _canGoForward = false;
   double _progress = 0.0;
+  DateTime _lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -72,80 +72,75 @@ class _BrowserScreenState extends State<BrowserScreen>
     super.dispose();
   }
 
-  void _onUrlSubmitted(String url) {
-    final browser = context.read<BrowserProvider>();
+  /// 节流处理加载进度：WebView 进度回调非常高频（每秒可达数十次），
+  /// 全量 setState 会导致地址栏/底部栏整棵树重建掉帧。
+  /// 策略：进度变化 ≥5% 或距上次 ≥120ms 或加载完成时才刷新。
+  void _onProgressChanged(double progress) {
+    if (!mounted) return;
+    final now = DateTime.now();
+    final elapsed = now.difference(_lastProgressAt).inMilliseconds;
+    final delta = (progress - _progress).abs();
+    if (delta >= 0.05 || elapsed >= 120 || progress >= 1.0) {
+      _lastProgressAt = now;
+      setState(() => _progress = progress);
+    }
+  }
+
+  /// 统一导航入口 — 地址栏 / 首页搜索 / 联想点击 / 快捷链接 / AI 操作全部走这里。
+  ///
+  /// 修复「搜索提交不跳转」：任何入口都归一为
+  /// 1. 更新活动标签页 URL（同步地址栏 / 路由 UI）；
+  /// 2. 通过 NavBus 驱动「当前活动 WebView 实例」真正加载；
+  /// 3. 若 WebView 尚未创建（新标签页首跳），由 WebViewContainer
+  ///    以 initialUrl 新建并加载，pendingUrl 机制兜底。
+  Future<void> _navigateTo(String input) async {
     final settings = context.read<SettingsProvider>();
+    final url = SearchService.normalizeInput(input, settings.searchEngine);
+    if (url.isEmpty) return;
 
-    String finalUrl = url.trim();
-    // 检测是否为搜索词
-    if (!finalUrl.startsWith('http://') &&
-        !finalUrl.startsWith('https://') &&
-        !finalUrl.contains('.')) {
-      final engine = SearchEngines.byName(settings.searchEngine);
-      finalUrl = '${engine.url}${Uri.encodeComponent(finalUrl)}';
-    } else if (!finalUrl.startsWith('http://') &&
-        !finalUrl.startsWith('https://')) {
-      finalUrl = 'https://$finalUrl';
-    }
-
+    final browser = context.read<BrowserProvider>();
     if (browser.activeTabIndex >= 0) {
-      browser.updateTabUrl(browser.activeTabIndex, finalUrl);
+      browser.updateTabUrl(browser.activeTabIndex, url);
     }
 
-    // 已有 WebView 时直接驱动加载（新标签页场景由 initialUrlRequest 负责），
-    // 避免依赖 didUpdateWidget 自动重载造成重定向循环。
-    _webViewController?.loadUrl(
-      urlRequest: URLRequest(url: WebUri(finalUrl)),
-    );
+    final controller = NavBus.active;
+    if (controller != null) {
+      await controller.loadUrl(url);
+      await controller.refreshNavigationState();
+    }
+
+    if (mounted) {
+      setState(() {
+        _canGoBack = false;
+        _canGoForward = false;
+      });
+    }
   }
 
   /// 刷新/停止 — 加载中停止，否则刷新
   void _onRefreshPressed() {
-    final controller = _webViewController;
-    if (controller == null) return;
+    final container = NavBus.active;
+    if (container == null) return;
     final activeTab = context.read<BrowserProvider>().activeTab;
     if (activeTab?.isLoading == true) {
-      controller.stopLoading();
+      container.stopLoading();
     } else {
-      controller.reload();
+      container.reload();
     }
   }
 
-  /// 后退：调用 WebView 原生方法，并刷新按钮可用状态
+  /// 后退：调用当前活动 WebView 原生 goBack，容器内部自动刷新按钮可用状态
   Future<void> _goBack() async {
-    final c = _webViewController;
-    if (c == null) return;
-    await c.goBack();
-    await _refreshNavStateAfterAction();
+    final controller = NavBus.active;
+    if (controller == null) return;
+    await controller.goBack();
   }
 
-  /// 前进：调用 WebView 原生方法，并刷新按钮可用状态
+  /// 前进：调用当前活动 WebView 原生 goForward，容器内部自动刷新按钮可用状态
   Future<void> _goForward() async {
-    final c = _webViewController;
-    if (c == null) return;
-    await c.goForward();
-    await _refreshNavStateAfterAction();
-  }
-
-  /// 前进/后退后稍候刷新按钮可用状态（等待 WebView 历史栈更新）
-  Future<void> _refreshNavStateAfterAction() async {
-    if (!mounted) return;
-    await Future.delayed(const Duration(milliseconds: 160));
-    if (!mounted) return;
-    final c = _webViewController;
-    if (c == null) return;
-    try {
-      final canBack = await c.canGoBack();
-      final canFwd = await c.canGoForward();
-      if (mounted) {
-        setState(() {
-          _canGoBack = canBack;
-          _canGoForward = canFwd;
-        });
-      }
-    } catch (_) {
-      // WebView 尚未就绪时忽略
-    }
+    final controller = NavBus.active;
+    if (controller == null) return;
+    await controller.goForward();
   }
 
   @override
@@ -167,13 +162,13 @@ class _BrowserScreenState extends State<BrowserScreen>
                     isLoading: browser.activeTab?.isLoading ?? false,
                     progress: _progress,
                     onRefresh: _onRefreshPressed,
-                    onSubmitted: _onUrlSubmitted,
+                    onSubmitted: _navigateTo,
                   ),
 
                 // 页面内容
                 Expanded(
                   child: isOnNewTab
-                      ? const NewTabPage()
+                      ? NewTabPage(onSearch: _navigateTo)
                       : WebViewContainer(
                           key: ValueKey(browser.activeTab?.id),
                           tabId: browser.activeTab?.id ?? '',
@@ -203,14 +198,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                               browser.setTabLoading(activeIndex, loading);
                             }
                           },
-                          onProgressChanged: (progress) {
-                            if (mounted) {
-                              setState(() => _progress = progress);
-                            }
-                          },
-                          onControllerReady: (controller) {
-                            _webViewController = controller;
-                          },
+                          onProgressChanged: _onProgressChanged,
                           onNavigationStateChanged: (canBack, canFwd) {
                             if (mounted) {
                               setState(() {
@@ -255,7 +243,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _goHome(BrowserProvider browser) {
-    // 回到新标签页
+    // 回到新标签页（WebViewContainer 随之销毁，NavBus 自动注销）
     final activeIndex = browser.activeTabIndex;
     if (activeIndex >= 0) {
       browser.updateTabUrl(activeIndex, '');
@@ -263,7 +251,6 @@ class _BrowserScreenState extends State<BrowserScreen>
     setState(() {
       _canGoBack = false;
       _canGoForward = false;
-      _webViewController = null;
     });
   }
 
