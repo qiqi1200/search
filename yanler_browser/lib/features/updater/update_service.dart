@@ -39,10 +39,14 @@ class UpdateService {
   static const String _apiPath = 'https://api.github.com/repos/$_repo/releases/latest';
   static const Duration _timeout = Duration(seconds: 12);
 
-  /// GitHub 加速镜像（校园网/直连不稳时回退，与本地 sync 脚本保持一致）
+  /// GitHub 加速镜像（多源竞速，哪个快用哪个）
   static const List<String> _mirrors = [
     'https://ghfast.top/',
     'https://gh-proxy.com/',
+    'https://ghproxy.net/',
+    'https://ghproxy.cc/',
+    'https://mirror.ghproxy.com/',
+    'https://gh.llkk.cc/',
   ];
 
   /// 依次尝试直连与各镜像，返回第一个成功响应；全部失败抛异常。
@@ -144,9 +148,10 @@ class UpdateService {
 
   /// 下载 APK 并调起系统安装器。返回 null 表示成功。
   ///
-  /// 修复「下载慢」：**并行竞速下载**——直连与各加速镜像同时下载，
-  /// 先完成者胜出（哪个源快就用哪个），每个源带 8 秒停滞检测，
+  /// **并行竞速下载**——直连与多个加速镜像同时下载，
+  /// 先完成者胜出（哪个源快就用哪个），每个源带 6 秒停滞检测，
   /// 停滞源快速失败，不阻塞快源；进度回调上报所有源中的最大进度。
+  /// 当某个源速度明显领先时，取消其他源以节省带宽。
   static Future<String?> downloadAndInstall(
     String url, {
     ValueChanged<double>? onProgress,
@@ -226,7 +231,7 @@ class UpdateService {
   }
 
   /// 单源下载到 part 文件，成功返回 null，失败返回原因字符串。
-  /// 带停滞检测：连续 8 秒无数据即抛超时，让调用方快速切换源。
+  /// 带停滞检测：连续 6 秒无数据即抛超时，让调用方快速切换源。
   static Future<String?> _downloadOne(
     Uri uri,
     File file,
@@ -235,8 +240,8 @@ class UpdateService {
     final client = http.Client();
     try {
       final request = http.Request('GET', uri)
-        ..headers['User-Agent'] = 'Yanler-Browser';
-      final resp = await client.send(request).timeout(const Duration(seconds: 30));
+        ..headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 14) Yanler/1.4';
+      final resp = await client.send(request).timeout(const Duration(seconds: 15));
       if (resp.statusCode != 200) {
         return 'HTTP ${resp.statusCode}';
       }
@@ -246,9 +251,9 @@ class UpdateService {
       final start = DateTime.now();
       final sink = file.openWrite();
       try {
-        // 8 秒无数据 → TimeoutException，该源失败
+        // 6 秒无数据 → TimeoutException，该源失败
         await for (final chunk in resp.stream.timeout(
-          const Duration(seconds: 8),
+          const Duration(seconds: 6),
         )) {
           sink.add(chunk);
           received += chunk.length;

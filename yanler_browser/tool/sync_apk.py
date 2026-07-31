@@ -43,9 +43,13 @@ def log(msg: str, notify: bool = True) -> None:
 
 
 MIRRORS = [
-    # 国内加速镜像（仅作为直连失败/卡顿时的回退）
-    "https://gh-proxy.com/",
+    # 国内加速镜像（多源竞速，直连失败/卡顿时回退）
     "https://ghfast.top/",
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "https://ghproxy.cc/",
+    "https://mirror.ghproxy.com/",
+    "https://gh.llkk.cc/",
 ]
 
 

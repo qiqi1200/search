@@ -53,6 +53,16 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # Gradle 缓存加速
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('yanler_browser/android/**/*.gradle*', 'yanler_browser/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Install dependencies
         run: flutter pub get
 
