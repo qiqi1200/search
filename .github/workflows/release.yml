@@ -10,6 +10,10 @@ on:
         required: true
         type: string
 
+defaults:
+  run:
+    working-directory: yanler_browser
+
 jobs:
   build_apk:
     name: Build & Upload APK
@@ -36,7 +40,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/app/outputs/flutter-apk/app-release.apk
+          file: yanler_browser/build/app/outputs/flutter-apk/app-release.apk
           asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}.apk
           tag: ${{ github.event.inputs.version || github.ref_name }}
           overwrite: true
@@ -45,7 +49,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          file: yanler_browser/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
           asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-armv7a.apk
           tag: ${{ github.event.inputs.version || github.ref_name }}
           overwrite: true
@@ -76,7 +80,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: Yanler-Windows-x64.zip
+          file: yanler_browser/Yanler-Windows-x64.zip
           asset_name: Yanler-${{ github.event.inputs.version || github.ref_name }}-windows-x64.zip
           tag: ${{ github.event.inputs.version || github.ref_name }}
           overwrite: true

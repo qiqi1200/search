@@ -4,12 +4,16 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'lib/**'
-      - 'pubspec.yaml'
+      - 'yanler_browser/lib/**'
+      - 'yanler_browser/pubspec.yaml'
       - '.github/workflows/**'
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # 手动触发
+
+defaults:
+  run:
+    working-directory: yanler_browser
 
 jobs:
   analyze:
@@ -55,7 +59,7 @@ jobs:
         with:
           name: yanler-apk
           path: |
-            build/app/outputs/flutter-apk/*.apk
+            yanler_browser/build/app/outputs/flutter-apk/*.apk
 
   build_windows:
     name: Build Windows exe
@@ -82,4 +86,4 @@ jobs:
         with:
           name: yanler-windows
           path: |
-            build/windows/runner/Release/
+            yanler_browser/build/windows/runner/Release/
