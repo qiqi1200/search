@@ -58,19 +58,28 @@ class UpdateService {
     'https://gh.llkk.cc/',
   ];
 
-  /// 并行竞速检测版本：同时请求所有源，第一个成功的胜出。
-  /// 国内用户通常 jsDelivr 200ms 内响应，无需等待 GitHub API 超时。
+  /// 并行竞速检测版本：同时请求所有源，收集结果后取版本号最高者。
+  ///
+  /// 为什么取最高而不是第一个成功的：jsDelivr 的 @main 缓存会滞后于 main 分支
+  ///（实测已发 1.4.3 时 CDN 仍可能返回 1.4.1）。若第一个响应的是陈旧源，
+  /// 应用会误判「已是最新」而漏掉更新。取最高版本让陈旧源无害——
+  /// 只要任一源（通常 GitHub API）返回最新版，就一定能检测到。
   static Future<Map<String, dynamic>?> _fetchVersionInfo() async {
     final completer = Completer<Map<String, dynamic>?>();
     var pending = _versionSources.length + 1; // +1 for GitHub API
+    Map<String, dynamic>? best;
 
-    void onFinish(Map<String, dynamic>? result) {
-      if (!completer.isCompleted && result != null) {
-        completer.complete(result);
+    void consider(Map<String, dynamic>? result) {
+      if (completer.isCompleted) return;
+      if (result != null) {
+        final v = result['version'] as String? ?? '';
+        if (best == null || _isNewer(v, best!['version'] as String? ?? '')) {
+          best = result;
+        }
       }
       pending--;
-      if (pending <= 0 && !completer.isCompleted) {
-        completer.complete(null);
+      if (pending <= 0) {
+        completer.complete(best);
       }
     }
 
@@ -84,18 +93,18 @@ class UpdateService {
           if (resp.statusCode == 200) {
             final data = jsonDecode(resp.body) as Map<String, dynamic>;
             if (data['version'] != null) {
-              onFinish(data);
+              consider(data);
               return;
             }
           }
-          onFinish(null);
+          consider(null);
         } catch (_) {
-          onFinish(null);
+          consider(null);
         }
       }());
     }
 
-    // 源 2：GitHub Releases API（完整信息，但国内可能超时）
+    // 源 2：GitHub Releases API（权威源，但国内可能慢/超时）
     unawaited(() async {
       try {
         final resp = await http
@@ -120,7 +129,7 @@ class UpdateService {
             }
           }
           if (tag.isNotEmpty && url != null) {
-            onFinish({
+            consider({
               'version': tag,
               'url': url,
               'notes': (data['body'] as String? ?? '').trim(),
@@ -128,11 +137,17 @@ class UpdateService {
             return;
           }
         }
-        onFinish(null);
+        consider(null);
       } catch (_) {
-        onFinish(null);
+        consider(null);
       }
     }());
+
+    // 兜底截止：5 秒内即使还有源未返回（如校园网下 GitHub API 超时），
+    // 用当前已收集到的最高版本，避免检查被慢源卡死。
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) completer.complete(best);
+    });
 
     return completer.future;
   }
