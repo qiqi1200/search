@@ -21,6 +21,9 @@ class SettingsProvider extends ChangeNotifier {
   bool _readingModeEnabled = true;
   bool _comicAutoNext = true;
 
+  // 弹窗广告屏蔽（全局默认开启）
+  bool _popupBlockEnabled = true;
+
   ThemeMode get themeMode => _themeMode;
   String get searchEngine => _searchEngine;
   bool get adblockEnabled => _adblockEnabled;
@@ -45,6 +48,9 @@ class SettingsProvider extends ChangeNotifier {
   /// 漫画无缝续读（滚到底部自动跳下一章）
   bool get comicAutoNext => _comicAutoNext;
 
+  /// 弹窗广告屏蔽（全局默认开启）
+  bool get popupBlockEnabled => _popupBlockEnabled;
+
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   SettingsProvider() {
@@ -55,7 +61,24 @@ class SettingsProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _themeMode =
         prefs.getBool('darkMode') == true ? ThemeMode.dark : ThemeMode.light;
-    _searchEngine = prefs.getString('searchEngine') ?? 'Yanler Search';
+    // 默认引擎：一次性迁移老版本残留的「需翻墙」默认值（DuckDuckGo/Google/Brave/SearXNG）
+    // 到聚合搜索 Yanler Search。迁移后用户再手动选需翻墙引擎不会被二次重置。
+    final stored = prefs.getString('searchEngine') ?? '';
+    final migrated = prefs.getBool('searchEngineMigrated') ?? false;
+    if (!migrated && stored.isNotEmpty) {
+      if (const {'duckduckgo', 'google', 'brave', 'searxng'}
+          .contains(stored.toLowerCase())) {
+        _searchEngine = 'Yanler Search';
+        await prefs.setString('searchEngine', 'Yanler Search');
+      } else {
+        _searchEngine = stored;
+      }
+      await prefs.setBool('searchEngineMigrated', true);
+    } else if (stored.isEmpty) {
+      _searchEngine = 'Yanler Search';
+    } else {
+      _searchEngine = stored;
+    }
     _adblockEnabled = prefs.getBool('adblockEnabled') ?? true;
     _doNotTrack = prefs.getBool('doNotTrack') ?? true;
     _blockThirdPartyCookies =
@@ -69,6 +92,7 @@ class SettingsProvider extends ChangeNotifier {
     _glassOpacity = prefs.getDouble('glassOpacity') ?? 1.0;
     _readingModeEnabled = prefs.getBool('readingModeEnabled') ?? true;
     _comicAutoNext = prefs.getBool('comicAutoNext') ?? true;
+    _popupBlockEnabled = prefs.getBool('popupBlockEnabled') ?? true;
     notifyListeners();
   }
 
@@ -156,6 +180,14 @@ class SettingsProvider extends ChangeNotifier {
     _comicAutoNext = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('comicAutoNext', value);
+    notifyListeners();
+  }
+
+  /// 弹窗广告屏蔽开关
+  Future<void> setPopupBlockEnabled(bool value) async {
+    _popupBlockEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('popupBlockEnabled', value);
     notifyListeners();
   }
 }

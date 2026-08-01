@@ -3,9 +3,6 @@ class AppConstants {
   static const String appVersion = '1.0.0';
   static const String homepageUrl = 'https://yanler.app';
 
-  // 默认搜索引擎
-  static const String defaultSearchEngine = 'duckduckgo';
-
   // 广告过滤规则 URL
   static const String easylistUrl =
       'https://easylist.to/easylist/easylist.txt';

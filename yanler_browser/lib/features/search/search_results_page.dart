@@ -1,5 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/widgets/liquid_glass.dart';
+import '../../providers/ai_provider.dart';
 import 'aggregated_search_service.dart';
 
 /// Yanler 聚合搜索结果页 — 多引擎结果统一展示
@@ -20,10 +23,41 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
   bool _loading = true;
   String? _error;
 
+  // AI 检索
+  bool _aiLoading = false;
+  Map<String, dynamic>? _aiAnswer;
+
   @override
   void initState() {
     super.initState();
     _search();
+  }
+
+  /// 调用 AI 对聚合结果去重/排序/总结（未配置 AI 时按钮不显示）
+  Future<void> _runAIRetrieval() async {
+    if (_aiLoading || _results.isEmpty) return;
+    setState(() => _aiLoading = true);
+    final ai = context.read<AIProvider>();
+    final raw = await ai.smartRetrieval(widget.query, _results);
+    if (!mounted) return;
+    setState(() {
+      _aiLoading = false;
+      _aiAnswer = _tryParse(raw);
+    });
+  }
+
+  /// 容错解析 LLM JSON：取首个 `{` 到末个 `}`，失败退化为纯文本 summary。
+  /// LLM 输出非严格 JSON 是常态，绝不因解析失败崩溃。
+  Map<String, dynamic> _tryParse(String raw) {
+    final start = raw.indexOf('{');
+    final end = raw.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        final data = jsonDecode(raw.substring(start, end + 1));
+        if (data is Map<String, dynamic>) return data;
+      } catch (_) {}
+    }
+    return {'summary': raw.trim(), 'results': const []};
   }
 
   Future<void> _search() async {
@@ -91,6 +125,14 @@ class _SearchResultsPageState extends State<SearchResultsPage> {
                               onTapResult: (item) {
                                 // 返回 URL 给 browser_screen 处理导航
                                 Navigator.pop(context, item.url);
+                              },
+                              aiConfigured:
+                                  context.read<AIProvider>().isConfigured,
+                              aiLoading: _aiLoading,
+                              aiAnswer: _aiAnswer,
+                              onAIRetrieve: _runAIRetrieval,
+                              onOpenUrl: (url) {
+                                if (url.isNotEmpty) Navigator.pop(context, url);
                               },
                             ),
             ),
@@ -223,7 +265,7 @@ class _LoadingView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            '正在聚合搜索…',
+            '正在聚合多个引擎…',
             style: TextStyle(
               fontSize: 13,
               color: theme.colorScheme.onSurfaceVariant,
@@ -231,7 +273,7 @@ class _LoadingView extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Bing · 百度 · 搜狗 · DuckDuckGo',
+            'Bing · 百度 · 搜狗 · 360 · 神马 · 国际引擎',
             style: TextStyle(
               fontSize: 11,
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
@@ -324,10 +366,22 @@ class _ResultsList extends StatelessWidget {
   final bool isDark;
   final ValueChanged<SearchResultItem> onTapResult;
 
+  // AI 检索
+  final bool aiConfigured;
+  final bool aiLoading;
+  final Map<String, dynamic>? aiAnswer;
+  final VoidCallback onAIRetrieve;
+  final ValueChanged<String> onOpenUrl;
+
   const _ResultsList({
     required this.results,
     required this.isDark,
     required this.onTapResult,
+    required this.aiConfigured,
+    required this.aiLoading,
+    required this.aiAnswer,
+    required this.onAIRetrieve,
+    required this.onOpenUrl,
   });
 
   @override
@@ -340,10 +394,19 @@ class _ResultsList extends StatelessWidget {
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
-      itemCount: results.length + 1, // +1 for header
+      itemCount: results.length + 2, // +2: AI 卡片 + 来源统计条
       separatorBuilder: (_, __) => const SizedBox(height: 2),
       itemBuilder: (context, index) {
         if (index == 0) {
+          return _AICard(
+            configured: aiConfigured,
+            loading: aiLoading,
+            answer: aiAnswer,
+            onRetrieve: onAIRetrieve,
+            onOpenUrl: onOpenUrl,
+          );
+        }
+        if (index == 1) {
           // 来源统计条
           return _EngineSummaryBar(
             counts: engineCounts,
@@ -351,13 +414,207 @@ class _ResultsList extends StatelessWidget {
             isDark: isDark,
           );
         }
-        final item = results[index - 1];
+        final item = results[index - 2];
         return _ResultCard(
           item: item,
           isDark: isDark,
           onTap: () => onTapResult(item),
         );
       },
+    );
+  }
+}
+
+/// AI 检索卡片：未配置 AI → 不占位；未检索 → 显示按钮；检索中 → loading；
+/// 完成后 → 摘要 + 精简结果行（点击直接用 AI 选的 URL 导航）
+class _AICard extends StatelessWidget {
+  final bool configured;
+  final bool loading;
+  final Map<String, dynamic>? answer;
+  final VoidCallback onRetrieve;
+  final ValueChanged<String> onOpenUrl;
+
+  const _AICard({
+    required this.configured,
+    required this.loading,
+    required this.answer,
+    required this.onRetrieve,
+    required this.onOpenUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!configured) return const SizedBox.shrink();
+
+    if (loading) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.3),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.15),
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'AI 正在去重与总结…',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final data = answer;
+    if (data == null) {
+      // 未检索：入口按钮
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        alignment: Alignment.centerLeft,
+        child: FilledButton.tonalIcon(
+          onPressed: onRetrieve,
+          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+          label: const Text('AI 检索 · 去重与总结'),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            textStyle: const TextStyle(fontSize: 12.5),
+          ),
+        ),
+      );
+    }
+
+    final summary = (data['summary'] as String? ?? '').trim();
+    final aiResults = (data['results'] as List? ?? const [])
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x335B7FFF), Color(0x338B5CFF)],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded,
+                  size: 14, color: theme.colorScheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                'AI 检索',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          if (summary.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              summary,
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.55,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
+          if (aiResults.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            for (final r in aiResults)
+              _AIResultRow(
+                title: r['title']?.toString() ?? '',
+                url: r['url']?.toString() ?? '',
+                why: r['why']?.toString() ?? '',
+                onTap: () => onOpenUrl(r['url']?.toString() ?? ''),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// AI 检索卡片内的精简结果行
+class _AIResultRow extends StatelessWidget {
+  final String title;
+  final String url;
+  final String why;
+  final VoidCallback onTap;
+
+  const _AIResultRow({
+    required this.title,
+    required this.url,
+    required this.why,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (title.isEmpty && why.isEmpty) return const SizedBox.shrink();
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: theme.colorScheme.primary,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (why.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                why,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -502,9 +759,14 @@ class _EngineTag extends StatelessWidget {
 
   static const _engineColors = {
     'Bing': Color(0xFF00809D),
+    'Google': Color(0xFF4285F4),
     '百度': Color(0xFF2932E1),
-    '搜狗': Color(0xFFFB6045),
     'DuckDuckGo': Color(0xFFDE5833),
+    'Brave': Color(0xFFFB542B),
+    '360': Color(0xFF7DAA2A),
+    '搜狗': Color(0xFFFB6045),
+    '神马': Color(0xFF00B39D),
+    'SearXNG': Color(0xFF4C8BF5),
   };
 
   @override

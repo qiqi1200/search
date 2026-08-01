@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../features/agent_bridge/agent_engine.dart';
 import '../features/agent_bridge/browser_tools.dart';
+import '../features/search/aggregated_search_service.dart';
 
 /// 聊天会话 — 支持持久化保存/恢复
 class ChatSession {
@@ -470,6 +471,79 @@ class AIProvider extends ChangeNotifier {
         .allMatches(response)
         .map((m) => m.group(0)!)
         .toList();
+  }
+
+  // ==================== AI 聚合检索（不污染会话历史） ====================
+
+  /// 把多引擎聚合结果喂给 LLM 去重/排序/总结。
+  /// 不写入会话历史、不触碰聊天页的 `_isProcessing`/`_currentClient`，
+  /// 返回 LLM 裸文本（结果页自行解析 JSON）。
+  Future<String> smartRetrieval(
+    String query,
+    List<SearchResultItem> items,
+  ) async {
+    if (!isConfigured) return '未配置 AI 服务，请在 AI 助手页面填写 API Key。';
+    final prompt = _buildRetrievalPrompt(query, items);
+    return _requestMessages([
+      {
+        'role': 'system',
+        'content': '你是资深搜索聚合助手。请对用户给的多引擎结果去重、按相关度排序、'
+            '提取精华，并严格输出 JSON。',
+      },
+      {'role': 'user', 'content': prompt},
+    ]);
+  }
+
+  String _buildRetrievalPrompt(String query, List<SearchResultItem> items) {
+    final sb = StringBuffer('对「$query」做聚合检索。下面是来自各引擎的原始结果'
+        '（标题 | URL | 摘要）：\n');
+    final top = items.take(20).toList();
+    for (var i = 0; i < top.length; i++) {
+      final it = top[i];
+      sb.writeln('${i + 1}. [${it.engine}] ${it.title} / ${it.url} / ${it.snippet}');
+    }
+    sb.writeln();
+    sb.writeln('请：1) 删除重复内容（同 URL 或高度相似标题只留一条）；'
+        '2) 按相关度排序，保留最相关的 8 条；');
+    sb.writeln('3) 每条给一句「为什么值得点」；4) 结尾用一两句总结最佳答案。');
+    sb.writeln('严格只输出 JSON（不要 markdown 代码块）：');
+    sb.writeln('{"summary":"…","results":[{"title":"…","url":"…","why":"…"}]}');
+    return sb.toString();
+  }
+
+  /// 裸 LLM 请求（AI 检索专用）：不复用会话、不写历史。
+  Future<String> _requestMessages(List<Map<String, String>> messages) async {
+    final client = http.Client();
+    try {
+      final response = await client
+          .post(
+            Uri.parse(_apiUrl),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_apiKey',
+            },
+            body: jsonEncode({
+              'model': _model,
+              'messages': messages,
+              'temperature': 0.3,
+              'max_tokens': 800,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return (data['choices'][0]['message']['content'] as String? ?? '')
+            .trim();
+      }
+      return 'AI 请求失败（${response.statusCode}）';
+    } catch (e) {
+      if (e.toString().contains('TimeoutException')) {
+        return 'AI 请求超时，请检查 API 地址或网络';
+      }
+      return 'AI 请求出错：$e';
+    } finally {
+      client.close();
+    }
   }
 
   void clearApiConfig() {
