@@ -202,6 +202,9 @@ def main() -> int:
     os.replace(tmp, dest)
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         f.write(tag)
+    # 下载完成后再清理旧包：此前 main 开头只在「下载前」清理，
+    # 新包落地后旧包不会被立即删除，要等下一次运行才清。
+    prune_old_apks()
     log(f"✓ 已同步 v{tag} -> {dest}（{os.path.getsize(dest) / 1024 / 1024:.1f} MB）")
     return 0
 
