@@ -224,6 +224,13 @@ class _PrivacySection extends StatelessWidget {
         ),
         const _Divider(),
         _SwitchRow(
+          label: '弹窗广告屏蔽',
+          subtitle: '拦截 window.open 自动弹窗，恶意弹窗直接关闭',
+          value: settings.popupBlockEnabled,
+          onChanged: (v) => settings.setPopupBlockEnabled(v),
+        ),
+        const _Divider(),
+        _SwitchRow(
           label: '漫画无缝续读',
           subtitle: '滚动到底部自动跳转下一章',
           value: settings.comicAutoNext,

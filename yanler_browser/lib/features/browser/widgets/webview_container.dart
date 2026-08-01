@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/settings_provider.dart';
 import '../../adblock/adblock_engine.dart';
+import '../../adblock/popup_block_script.dart';
 import '../../reading/reading_mode_service.dart';
 
 class WebViewContainer extends StatefulWidget {
@@ -23,6 +25,9 @@ class WebViewContainer extends StatefulWidget {
   final Function(InAppWebViewController)? onControllerReady;
   final Function(bool canGoBack, bool canGoForward)? onNavigationStateChanged;
 
+  /// 弹窗/新窗口请求（合法且带手势时回调，由 BrowserScreen 开新标签）
+  final void Function(String url)? onOpenInNewTab;
+
   const WebViewContainer({
     super.key,
     required this.tabId,
@@ -34,6 +39,7 @@ class WebViewContainer extends StatefulWidget {
     this.onControllerReady,
     this.onNavigationStateChanged,
     this.onProgressChanged,
+    this.onOpenInNewTab,
   });
 
   @override
@@ -203,6 +209,59 @@ class WebViewContainerState extends State<WebViewContainer>
     }
   }
 
+  /// 浏览器状态回调统一经此转发：若在 build 帧内触发（快速切标签、WebView 回调
+  /// 时序不可控），defer 到帧后执行，避免「markNeedsBuild during build」崩溃。
+  void _safeBrowserNotify(VoidCallback fn) {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) fn();
+      });
+    } else {
+      fn();
+    }
+  }
+
+  /// 弹窗/新窗口请求处理：广告/空/无手势 → 丢弃；合法且带手势 → 应用内开新标签。
+  ///
+  /// 广告判定复用 AdblockEngine 的精确域名规则（内存铁律：不放宽泛子串）。
+  void _handlePopupWindow(String url, bool hasGesture) {
+    // 空/纯脚本弹窗无实际内容可开，无论开关都忽略
+    final useless = url.isEmpty ||
+        url == 'about:blank' ||
+        url.startsWith('javascript:') ||
+        url.startsWith('data:text/html');
+
+    final settings = context.read<SettingsProvider>();
+    if (!settings.popupBlockEnabled) {
+      // 关闭屏蔽时也走应用内新标签（不开原生弹窗，避免界面混乱）
+      if (!useless) _openInApp(url);
+      return;
+    }
+    if (useless) return;
+    // host 命中广告规则 → 直接关闭
+    final adblock = context.read<AdblockEngine>();
+    if (adblock.shouldBlock(url, null)) return;
+    // 无用户手势的 window.open 极可能是自动弹窗 → 关闭
+    if (!hasGesture) return;
+    // 合法且带手势 → 应用内开新标签
+    _openInApp(url);
+  }
+
+  void _openInApp(String url) {
+    final cb = widget.onOpenInNewTab;
+    if (cb != null) {
+      cb(url);
+      return;
+    }
+    final c = _controller;
+    if (c != null) {
+      try {
+        c.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+      } catch (_) {}
+    }
+  }
+
   Future<void> _doLoad(InAppWebViewController c, String url) async {
     if (url.isEmpty) return;
     _pendingUrl = null;
@@ -235,6 +294,9 @@ class WebViewContainerState extends State<WebViewContainer>
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         preferredContentMode: UserPreferredContentMode.RECOMMENDED,
         allowBackgroundAudioPlaying: true,
+        // 弹窗广告屏蔽：接管 window.open，由 onCreateWindow 决定去向
+        supportMultipleWindows: true,
+        javaScriptCanOpenWindowsAutomatically: true,
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
@@ -265,67 +327,99 @@ class WebViewContainerState extends State<WebViewContainer>
         }
         return null;
       },
+      // 弹窗窗口拦截：window.open / target=_blank 一律接管，去向由我们决定
+      onCreateWindow: (controller, action) async {
+        final url = action.request.url?.toString() ?? '';
+        final hasGesture = action.hasGesture ?? false;
+        _handlePopupWindow(url, hasGesture);
+        return true; // 始终吞掉原生弹窗
+      },
       onLoadStart: (controller, url) {
-        widget.onLoadingChanged(true);
-        widget.onProgressChanged?.call(0.05);
+        if (!mounted) return;
         final urlStr = url?.toString() ?? '';
         if (urlStr.isNotEmpty) {
           _lastRequestedUrl = urlStr;
           _pendingUrl = null;
-          widget.onUrlChanged(urlStr);
         }
+        _safeBrowserNotify(() {
+          widget.onLoadingChanged(true);
+          widget.onProgressChanged?.call(0.05);
+          if (urlStr.isNotEmpty) widget.onUrlChanged(urlStr);
+        });
         // 导航开始时立即刷新前进/后退状态
         refreshNavigationState();
       },
       onProgressChanged: (controller, progress) {
-        widget.onProgressChanged?.call(progress / 100.0);
+        if (!mounted) return;
+        _safeBrowserNotify(() => widget.onProgressChanged?.call(progress / 100.0));
       },
       onLoadStop: (controller, url) async {
-        widget.onLoadingChanged(false);
-        widget.onProgressChanged?.call(1.0);
+        if (!mounted) return;
         final urlStr = url?.toString() ?? '';
         if (urlStr.isNotEmpty) {
           _lastRequestedUrl = urlStr;
           _pendingUrl = null;
-          widget.onUrlChanged(urlStr);
         }
+        _safeBrowserNotify(() {
+          widget.onLoadingChanged(false);
+          widget.onProgressChanged?.call(1.0);
+          if (urlStr.isNotEmpty) widget.onUrlChanged(urlStr);
+        });
         // 更新前进/后退状态（立即 + 延迟双保险）
         refreshNavigationState();
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) refreshNavigationState();
         });
 
+        // 弹窗广告屏蔽：全局注入（受设置开关控制；与阅读模式脚本幂等共存）
+        if (settings.popupBlockEnabled) {
+          try {
+            await controller.evaluateJavascript(
+                source: PopupBlockScript.cleanScript);
+          } catch (_) {}
+        }
+
         // 洁净浏览模式：阅读页自动注入清理脚本
         if (settings.readingModeEnabled && ReadingModeService.isReadingPage(urlStr)) {
           try {
-            await controller.evaluateJavascript(source: ReadingModeService.cleanScript);
+            await controller.evaluateJavascript(
+                source: ReadingModeService.cleanScript);
           } catch (_) {}
         }
 
         // 漫画无缝续读：检测下一章 + 滚动到底自动跳转
         if (settings.comicAutoNext && ReadingModeService.isComicPage(urlStr)) {
           try {
-            await controller.evaluateJavascript(source: ReadingModeService.comicContinuationScript);
+            await controller.evaluateJavascript(
+                source: ReadingModeService.comicContinuationScript);
           } catch (_) {}
         }
       },
       // 历史栈变化时（含前进/后退/链接跳转）实时刷新导航状态
       onUpdateVisitedHistory: (controller, url, isReload) {
-        refreshNavigationState();
+        if (mounted) refreshNavigationState();
       },
       onTitleChanged: (controller, title) {
-        if (title != null) {
-          widget.onTitleChanged(title);
+        if (!mounted) return;
+        final t = title;
+        if (t != null) {
+          _safeBrowserNotify(() => widget.onTitleChanged(t));
         }
       },
       onReceivedError: (controller, request, error) {
-        widget.onLoadingChanged(false);
-        widget.onProgressChanged?.call(1.0);
+        if (!mounted) return;
+        _safeBrowserNotify(() {
+          widget.onLoadingChanged(false);
+          widget.onProgressChanged?.call(1.0);
+        });
         refreshNavigationState();
       },
       onReceivedHttpError: (controller, request, errorResponse) {
-        widget.onLoadingChanged(false);
-        widget.onProgressChanged?.call(1.0);
+        if (!mounted) return;
+        _safeBrowserNotify(() {
+          widget.onLoadingChanged(false);
+          widget.onProgressChanged?.call(1.0);
+        });
         refreshNavigationState();
       },
     );

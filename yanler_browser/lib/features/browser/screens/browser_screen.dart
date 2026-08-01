@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/browser_provider.dart';
@@ -40,6 +41,9 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   /// 上次渲染的活动标签索引 — 用于在切换标签时重置按钮状态，避免残留上一标签的旧状态
   int _lastActiveIndex = 0;
+
+  /// 标签切换重置是否已调度 — 防止同一帧内连续 build 重复注册 postFrameCallback
+  bool _tabResetScheduled = false;
 
   @override
   void initState() {
@@ -121,6 +125,8 @@ class _BrowserScreenState extends State<BrowserScreen>
       // 用户点击结果项后返回 URL，继续导航
       if (result != null && result.isNotEmpty && mounted) {
         final browser = context.read<BrowserProvider>();
+        // 用户在聚合页停留期间可能已关闭标签，防御
+        if (browser.activeTab == null) return;
         if (browser.activeTabIndex >= 0) {
           browser.updateTabUrl(browser.activeTabIndex, result);
         }
@@ -223,6 +229,12 @@ class _BrowserScreenState extends State<BrowserScreen>
           });
         }
       },
+      // 弹窗/新窗口（合法且带手势）→ 应用内开新标签
+      onOpenInNewTab: (url) {
+        if (url.isNotEmpty) {
+          context.read<BrowserProvider>().addTab(url: url);
+        }
+      },
     );
   }
 
@@ -235,10 +247,12 @@ class _BrowserScreenState extends State<BrowserScreen>
         final adblockCount = context.select<AdblockEngine, int>((e) => e.blockedCount);
         final aiActive = context.select<AIProvider, bool>((p) => p.agentMode);
 
-        // 活动标签切换时：重置按钮/进度状态，避免残留上一标签的旧状态
-        if (browser.activeTabIndex != _lastActiveIndex) {
-          _lastActiveIndex = browser.activeTabIndex;
+        // 活动标签切换时：重置按钮/进度状态，避免残留上一标签的旧状态。
+        // 用一次性标志去重：同一帧内连续 build 只注册一个回调，防竞态崩溃。
+        if (browser.activeTabIndex != _lastActiveIndex && !_tabResetScheduled) {
+          _tabResetScheduled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            _tabResetScheduled = false;
             if (mounted) {
               setState(() {
                 _canGoBack = false;
@@ -246,6 +260,7 @@ class _BrowserScreenState extends State<BrowserScreen>
                 _progress = 0.0;
               });
             }
+            _lastActiveIndex = browser.activeTabIndex;
           });
         }
 
@@ -589,7 +604,7 @@ class _BottomMenuSheet extends StatelessWidget {
   }
 }
 
-class _MenuButton extends StatelessWidget {
+class _MenuButton extends StatefulWidget {
   final IconData icon;
   final String label;
   final bool active;
@@ -603,62 +618,95 @@ class _MenuButton extends StatelessWidget {
   });
 
   @override
+  State<_MenuButton> createState() => _MenuButtonState();
+}
+
+class _MenuButtonState extends State<_MenuButton> {
+  /// 按压态：按下缩至 0.92 + 透明度 0.8，松开 150ms easeOut 复原，
+  /// 对应原生「轻触缩放 + 微震」反馈。
+  ///
+  /// 用 StatefulWidget 而非 StatelessWidget：状态切换（如点「深色」/「无痕」
+  /// 触发父级重绘）时本 State 不重建，按压动画不被中断，丝滑收尾。
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value) setState(() => _pressed = value);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final active = widget.active;
 
     return GestureDetector(
-      onTap: onTap,
+      onTapDown: (_) {
+        HapticFeedback.lightImpact();
+        _setPressed(true);
+      },
+      onTapUp: (_) => _setPressed(false),
+      onTapCancel: () => _setPressed(false),
+      onTap: widget.onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: active
-                  ? const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-                    )
-                  : null,
-              color: active
-                  ? null
-                  : theme.colorScheme.surfaceContainerHigh
-                      .withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: active
-                    ? theme.colorScheme.primary.withValues(alpha: 0.85)
-                    : theme.colorScheme.outline.withValues(alpha: 0.5),
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1.0,
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        child: AnimatedOpacity(
+          opacity: _pressed ? 0.8 : 1.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  gradient: active
+                      ? const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                        )
+                      : null,
+                  color: active
+                      ? null
+                      : theme.colorScheme.surfaceContainerHigh
+                          .withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: active
+                        ? theme.colorScheme.primary.withValues(alpha: 0.85)
+                        : theme.colorScheme.outline.withValues(alpha: 0.5),
+                  ),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF8B5CFF).withValues(alpha: 0.28),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Icon(
+                  widget.icon,
+                  size: 24,
+                  color: active ? Colors.white : theme.colorScheme.primary,
+                ),
               ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFF8B5CFF).withValues(alpha: 0.28),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              icon,
-              size: 24,
-              color: active ? Colors.white : theme.colorScheme.primary,
-            ),
+              const SizedBox(height: 6),
+              Text(
+                widget.label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: active ? theme.colorScheme.primary : null,
+                  fontWeight: active ? FontWeight.w600 : null,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: active ? theme.colorScheme.primary : null,
-              fontWeight: active ? FontWeight.w600 : null,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
