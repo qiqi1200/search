@@ -1,22 +1,19 @@
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 
-/// LiquidGlass — 液态玻璃表面组件
+/// LiquidGlass — 液态玻璃表面组件 (v2.0)
 ///
-/// 复刻 AndroidLiquidGlass (Kyant0/backdrop, iOS 26 Liquid Glass 风格) 的视觉语言，
-/// 用 Flutter 原生能力实现：
-///   1. BackdropFilter 背景模糊（BlurView 式）
-///   2. 半透明底色 + 亮度微调
-///   3. 确定性噪点纹理（模拟液体的折射颗粒感）
-///   4. 顶部镜面高光（玻璃边缘反光）
-///   5. 渐变发丝描边（Stillmind 风格渐变边框）
-///   6. 环境光分层投影
+/// 设计目标：完全透明、高级感的 Apple Liquid Glass 风格
+/// 核心特点：
+///   1. 极低的底色不透明度 — 让背景完全透出来
+///   2. 强烈的 BackdropFilter 模糊 — 玻璃核心
+///   3. 柔和的顶部高光 — 仿真玻璃反射
+///   4. 极细的渐变发丝边框 — 界限感
+///   5. 无噪点、无超假纹理 — 干净纯粹
 ///
-/// 注意：在 WebView 之上（平台视图）BackdropFilter 无法模糊平台内容，
-/// 此时自动退化为「半透明 + 噪点 + 高光 + 描边」，视觉效果依然成立。
+/// 参考：rdev/liquid-glass-react 的 Apple Liquid Glass 风格
 class LiquidGlass extends StatelessWidget {
   final Widget child;
 
@@ -26,16 +23,13 @@ class LiquidGlass extends StatelessWidget {
   /// 背景模糊强度（sigma）
   final double blur;
 
-  /// 底色不透明度
+  /// 底色不透明度（建议 0.08-0.15）
   final double opacity;
 
   /// 是否绘制顶部镜面高光
   final bool specular;
 
-  /// 是否绘制噪点纹理
-  final bool noise;
-
-  /// 是否绘制渐变发丝描边
+  /// 是否绘制渐变发丝边框
   final bool border;
 
   /// 描边宽度
@@ -47,19 +41,18 @@ class LiquidGlass extends StatelessWidget {
   /// 自定义底色（默认取主题 surface）
   final Color? tint;
 
-  /// 是否启用环境光投影（默认开）
+  /// 是否启用环境光投影
   final bool elevation;
 
   const LiquidGlass({
     super.key,
     required this.child,
     this.borderRadius,
-    this.blur = 24,
-    this.opacity = 0.4,
+    this.blur = 40,           // 增强模糊
+    this.opacity = 0.12,      // 默认极低不透明度，更透
     this.specular = true,
-    this.noise = true,
     this.border = true,
-    this.borderWidth = 1,
+    this.borderWidth = 0.8,   // 更细的边框
     this.shadows,
     this.tint,
     this.elevation = true,
@@ -71,51 +64,34 @@ class LiquidGlass extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final radius = borderRadius ?? BorderRadius.circular(16);
 
-    // 全局磨砂透明度倍率（设置页滑块可调）：
-    // 最终底色不透明度 = 组件自带 opacity × 用户倍率
+    // 全局毛玻璃透明度倍率
     final glassMul = context.watch<SettingsProvider>().glassOpacity.clamp(0.0, 1.0);
     final effectiveOpacity = (opacity * glassMul).clamp(0.0, 1.0);
 
-    final Color baseTint = tint ?? theme.colorScheme.surface;
-    // 通透度优化：浅色模式用纯白底（避免暖灰底色导致「发灰」），
-    // 深色模式略微提亮底色；不透明度整体下调，让背景透出来。
-    final Color fill = isDark
-        ? Color.lerp(baseTint, Colors.white, 0.08)!
-        : Colors.white;
+    // 关键：让背景完全透出来
+    // 浅色模式：用纯白底色，极低不透明度
+    // 深色模式：用纯黑底色，极低不透明度
+    final Color fill = isDark ? Colors.black : Colors.white;
 
     final Widget surface = ClipRRect(
       borderRadius: radius,
       child: Stack(
         fit: StackFit.passthrough,
         children: [
-          // 1. 背景模糊
+          // 1. 强烈的背景模糊 — 玻璃核心效果
           Positioned.fill(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
               child: Container(color: Colors.transparent),
             ),
           ),
-          // 2. 半透明底色（应用全局磨砂透明度倍率）
+          // 2. 极淡的半透明底色 — 只是轻微柔化背景
           Positioned.fill(
             child: Container(
               color: fill.withValues(alpha: effectiveOpacity),
             ),
           ),
-          // 3. 噪点纹理（折射颗粒感）— 更轻，避免发灰
-          if (noise)
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _NoisePainter(
-                  seed: 260607,
-                  density: isDark ? 0.026 : 0.014,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.03)
-                      : Colors.black.withValues(alpha: 0.015),
-                  pointSize: 1.0,
-                ),
-              ),
-            ),
-          // 4. 顶部镜面高光 — 更亮，强化玻璃感
+          // 3. 顶部柔和镜面高光 — 仿真玻璃反射
           if (specular)
             Positioned.fill(
               child: DecoratedBox(
@@ -123,18 +99,36 @@ class LiquidGlass extends StatelessWidget {
                   borderRadius: radius,
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
-                    end: const Alignment(0, 0.3),
+                    end: const Alignment(0, 0.25),
                     colors: [
                       isDark
-                          ? Colors.white.withValues(alpha: 0.1)
-                          : Colors.white.withValues(alpha: 0.42),
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.25),
                       Colors.transparent,
                     ],
                   ),
                 ),
               ),
             ),
-          // 5. 渐变发丝描边 + 边缘暗化
+          // 4. 底部微弱暗郁 — 增加叠层深度感
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: const Alignment(0, 0.7),
+                  colors: [
+                    Colors.transparent,
+                    isDark
+                        ? Colors.black.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.02),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 5. 极细渐变发丝边框
           if (border)
             Positioned.fill(
               child: CustomPaint(
@@ -142,17 +136,16 @@ class LiquidGlass extends StatelessWidget {
                   radius: radius,
                   width: borderWidth,
                   isDark: isDark,
-                  accent: theme.colorScheme.primary,
                 ),
               ),
             ),
-          // 6. 内容层（决定组件尺寸）
+          // 6. 内容层
           child,
         ],
       ),
     );
 
-    // 环境光投影画在裁剪层之外
+    // 环境光投影
     if (elevation && shadows != null && shadows!.isNotEmpty) {
       return DecoratedBox(
         decoration: BoxDecoration(
@@ -166,60 +159,16 @@ class LiquidGlass extends StatelessWidget {
   }
 }
 
-/// 确定性噪点 — 同一 seed 永远画同一张纹理，不闪屏
-class _NoisePainter extends CustomPainter {
-  final int seed;
-  final double density;
-  final Color color;
-  final double pointSize;
-
-  _NoisePainter({
-    required this.seed,
-    required this.density,
-    required this.color,
-    required this.pointSize,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rnd = Random(seed);
-    final paint = Paint()..color = color;
-    const cell = 4.0; // 网格粒度，保证分布均匀
-    for (double y = 0; y < size.height; y += cell) {
-      for (double x = 0; x < size.width; x += cell) {
-        if (rnd.nextDouble() < density) {
-          final jitterX = rnd.nextDouble() * cell;
-          final jitterY = rnd.nextDouble() * cell;
-          final r = pointSize * (0.6 + rnd.nextDouble() * 0.8);
-          canvas.drawCircle(
-            Offset(x + jitterX, y + jitterY),
-            r,
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_NoisePainter oldDelegate) =>
-      oldDelegate.seed != seed ||
-      oldDelegate.density != density ||
-      oldDelegate.color != color;
-}
-
-/// 渐变发丝描边 — 玻璃边缘反光（上亮下暗 + 一点品牌色）
+/// 极细渐变发丝边框 — 玻璃边缘反光
 class _GlassBorderPainter extends CustomPainter {
   final BorderRadius radius;
   final double width;
   final bool isDark;
-  final Color accent;
 
   _GlassBorderPainter({
     required this.radius,
     required this.width,
     required this.isDark,
-    required this.accent,
   });
 
   @override
@@ -236,22 +185,22 @@ class _GlassBorderPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = width;
 
-    // 渐变：顶部亮（高光反射），两侧过渡，底部带一丝品牌色
+    // 顶亮底暗的渐变边框
     final gradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              Colors.white.withValues(alpha: 0.38),
-              Colors.white.withValues(alpha: 0.08),
-              accent.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.25),
+              Colors.white.withValues(alpha: 0.05),
+              Colors.white.withValues(alpha: 0.02),
             ]
           : [
-              Colors.white.withValues(alpha: 1.0),
-              Colors.black.withValues(alpha: 0.07),
-              accent.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.6),
+              Colors.white.withValues(alpha: 0.15),
+              Colors.black.withValues(alpha: 0.05),
             ],
-      stops: const [0.0, 0.55, 1.0],
+      stops: const [0.0, 0.5, 1.0],
     ).createShader(strokeRect);
 
     paint.shader = gradient;
@@ -262,8 +211,7 @@ class _GlassBorderPainter extends CustomPainter {
   bool shouldRepaint(_GlassBorderPainter oldDelegate) =>
       oldDelegate.isDark != isDark ||
       oldDelegate.radius != radius ||
-      oldDelegate.width != width ||
-      oldDelegate.accent != accent;
+      oldDelegate.width != width;
 }
 
 /// 便捷：浅色/深色主题下统一的玻璃卡片外观参数
@@ -273,25 +221,25 @@ class GlassTokens {
   static List<BoxShadow> softShadow(bool isDark) => isDark
       ? [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
           ),
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 6,
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ]
       : [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
           ),
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 6,
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ];

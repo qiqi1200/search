@@ -1,0 +1,22 @@
+# flutter_launcher_icons 配置
+# 用于生成 Android/iOS/Web 平台的启动图标
+# 运行: flutter pub run flutter_launcher_icons
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  
+  # Android 自适应图标配置
+  adaptive_icon_background: "#F5F5F5"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+  
+  # iOS 配置
+  remove_alpha_ios: true
+  
+  # Web 配置
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    background_color: "#F5F5F5"
+    theme_color: "#6B8CFF"

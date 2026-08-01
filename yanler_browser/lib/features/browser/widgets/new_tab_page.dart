@@ -353,7 +353,12 @@ class _NewTabPageState extends State<NewTabPage>
   }
 }
 
-/// Yanler 文字 Logo — 思源宋体（古诗风格字体），品牌渐变
+/// Yanler 文字 Logo — 现代无衬线体，简洁品牌标识
+///
+/// 设计要点：
+/// - 统一 Outfit 字体，保持一致性
+/// - Y 与 anler 大小协调，比例更自然
+/// - 柔和的渐变色，不刺眼
 class _YanlerText extends StatelessWidget {
   const _YanlerText();
 
@@ -363,35 +368,36 @@ class _YanlerText extends StatelessWidget {
 
     return ShaderMask(
       shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
         colors: [
-          isDark ? const Color(0xFF7B9FFF) : const Color(0xFF5B7FFF),
-          isDark ? const Color(0xFFA07BFF) : const Color(0xFF8B5CFF),
-          isDark ? const Color(0xFFFF7B9F) : const Color(0xFFFF5C7B),
+          isDark ? const Color(0xFF8BA4FF) : const Color(0xFF6B8CFF),
+          isDark ? const Color(0xFFB88AFF) : const Color(0xFF9B6BFF),
         ],
       ).createShader(bounds),
       child: RichText(
-        text: const TextSpan(
+        text: TextSpan(
           children: [
             TextSpan(
               text: 'Y',
               style: TextStyle(
-                fontSize: 52,
-                fontWeight: FontWeight.w400,
-                letterSpacing: -2,
+                fontSize: 48,
+                fontWeight: FontWeight.w600,
+                letterSpacing: -1,
                 color: Colors.white,
-                fontFamily: 'SourceHanSerifSC',
+                fontFamily: 'Outfit',
+                height: 1.0,
               ),
             ),
             TextSpan(
               text: 'anler',
               style: TextStyle(
-                fontSize: 34,
-                fontWeight: FontWeight.w400,
-                letterSpacing: 3,
+                fontSize: 40,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1,
                 color: Colors.white,
-                fontFamily: 'SourceHanSerifSC',
+                fontFamily: 'Outfit',
+                height: 1.0,
               ),
             ),
           ],

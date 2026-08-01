@@ -1,0 +1,147 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./yanler_browser
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+            yanler_browser/.dart_tool
+            yanler_browser/build
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/app/key.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          storeFile=key.jks
+          EOF
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Rename APK with version
+        run: |
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk release/Yanler-${{ env.VERSION }}.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yanler-apk
+          path: yanler_browser/release/Yanler-*.apk
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: yanler_browser/release/Yanler-*.apk
+          name: Yanler ${{ env.VERSION }}
+          body: |
+            ## Yanler ${{ env.VERSION }} 自动发布
+            
+            **安装包**: `Yanler-${{ env.VERSION }}.apk`
+            
+            ### 更新方式
+            - 应用内检查更新：设置 → 关于 → 检查更新
+            - 或直接下载安装包覆盖安装
+            
+            ### 兌换码
+            系统可能会提示已有应用存在，请先卸载旧版后安装。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-version-json:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          BUILD=$(echo $VERSION | cut -d. -f3 || echo 0)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "BUILD=$BUILD" >> $GITHUB_ENV
+
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: yanler-apk
+          path: ./release
+
+      - name: Update version.json
+        run: |
+          cat > yanler_browser/version.json << EOF
+          {
+            "version": "${{ env.VERSION }}",
+            "build": ${{ env.BUILD }},
+            "url": "https://github.com/qiqi1200/search/releases/download/v${{ env.VERSION }}/Yanler-${{ env.VERSION }}.apk",
+            "notes": "Yanler v${{ env.VERSION }} 自动发布"
+          }
+          EOF
+
+      - name: Commit and push version.json
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add yanler_browser/version.json
+          git diff --staged --quiet || git commit -m "Update version.json for v${{ env.VERSION }}"
+          git push
