@@ -54,6 +54,11 @@ android {
             // 有正式密钥时用正式签名（保证更新一致性）；否则退回 debug 签名便于开发
             signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
         }
+        debug {
+            // debug 构建同样用正式签名（有密钥时）。这样 `flutter run` 调试版与正式版
+            // 签名一致，覆盖安装后不会破坏应用内更新的签名链——否则装过调试版就装不回正式更新。
+            signingConfig = keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+        }
     }
 }
 
