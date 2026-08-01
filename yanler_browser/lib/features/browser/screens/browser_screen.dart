@@ -159,11 +159,16 @@ class _BrowserScreenState extends State<BrowserScreen>
     }
   }
 
-  /// 后退：调用当前活动 WebView 原生 goBack，容器内部自动刷新按钮可用状态
+  /// 后退：有历史时走 WebView 原生 goBack；一级页面（无历史）时回到新标签页，
+  /// 保证后退按钮始终可用（浏览器惯例：后退到底 = 回首页）。
   Future<void> _goBack() async {
     final controller = NavBus.active;
-    if (controller == null) return;
-    await controller.goBack();
+    if (_canGoBack && controller != null) {
+      await controller.goBack();
+      return;
+    }
+    final browser = context.read<BrowserProvider>();
+    _goHome(browser);
   }
 
   /// 前进：调用当前活动 WebView 原生 goForward，容器内部自动刷新按钮可用状态

@@ -23,11 +23,15 @@ class SearchResultItem {
 /// 支持引擎：Bing / 百度 / 搜狗 / DuckDuckGo
 /// 去重策略：URL 标准化后取 host+path 哈希
 class AggregatedSearchService {
-  static const _timeout = Duration(seconds: 8);
+  static const _timeout = Duration(seconds: 5);
   static const _ua =
       'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36';
 
   /// 并发搜索所有引擎，返回去重排序后的统一结果。
+  ///
+  /// **不等最慢引擎**：DuckDuckGo 在国内被墙会卡到超时，旧版用 `Future.wait`
+  /// 等全部返回，导致 Bing/百度/搜狗早回来了也要干等数秒。现在改为
+  /// 「谁先返回用谁 + 4 秒兜底」，先到先得，避免搜索体验卡顿。
   /// 如果所有引擎均失败，抛出异常以便调用方回退到 WebView 直跳。
   static Future<List<SearchResultItem>> search(String query) async {
     final futures = <Future<List<SearchResultItem>>>[
@@ -37,18 +41,35 @@ class AggregatedSearchService {
       _searchDuckDuckGo(query),
     ];
 
-    final results = await Future.wait(futures);
-    final all = results.expand((list) => list).toList();
+    final all = <SearchResultItem>[];
+    final completer = Completer<List<SearchResultItem>>();
+    var done = 0;
+    for (final f in futures) {
+      unawaited(() async {
+        try {
+          all.addAll(await f);
+        } catch (_) {}
+        done++;
+        if (done == futures.length && !completer.isCompleted) {
+          completer.complete(all);
+        }
+      }());
+    }
+    // 兜底截止：4 秒内即使还有引擎未返回（如 DDG 被墙超时），用已有结果
+    Future.delayed(const Duration(seconds: 4), () {
+      if (!completer.isCompleted) completer.complete(all);
+    });
+    final collected = await completer.future;
 
     // 所有引擎全部失败 → 抛异常，调用方回退到 Bing WebView
-    if (all.isEmpty) {
+    if (collected.isEmpty) {
       throw Exception('所有引擎暂无结果，请重试');
     }
 
     // 去重：按 URL host+path 归一化
     final seen = <String>{};
     final deduped = <SearchResultItem>[];
-    for (final item in all) {
+    for (final item in collected) {
       final key = _normalizeUrl(item.url);
       if (key.isNotEmpty && seen.add(key)) {
         deduped.add(item);

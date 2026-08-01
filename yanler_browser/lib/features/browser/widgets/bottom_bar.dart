@@ -54,11 +54,11 @@ class BottomBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // 后退
+            // 后退：始终可点。一级页面无历史时由 BrowserScreen 兜底回新标签页
             _NavButton(
               icon: Icons.arrow_back_ios_new_rounded,
-              enabled: canGoBack,
-              onTap: canGoBack ? onBack : null,
+              enabled: true,
+              onTap: onBack,
               theme: theme,
             ),
 
