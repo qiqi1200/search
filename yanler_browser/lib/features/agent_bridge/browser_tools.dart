@@ -277,12 +277,19 @@ class BrowserTools {
           final q = _str(args, 'query');
           if (q.isEmpty) return const ToolResult.error('缺少 query 参数');
           final engine = SearchEngines.byName(settings.searchEngine);
-          browser.updateTabUrl(browser.activeTabIndex, '${engine.url}${Uri.encodeComponent(q)}');
+          final searchUrl = '${engine.url}${Uri.encodeComponent(q)}';
+          browser.updateTabUrl(browser.activeTabIndex, searchUrl);
+          // 仅更新 model 不会让 WebView 跳转（initialUrl 变化不触发重载），必须显式驱动加载
+          final searchNav = NavBus.active;
+          if (searchNav != null) await searchNav.loadUrl(searchUrl);
           return ToolResult.success('已搜索：$q（引擎：${engine.name}）');
         case 'browser.navigate':
           final url = _str(args, 'url');
           if (url.isEmpty) return const ToolResult.error('缺少 url 参数');
-          browser.updateTabUrl(browser.activeTabIndex, _normalizeUrl(url));
+          final navUrl = _normalizeUrl(url);
+          browser.updateTabUrl(browser.activeTabIndex, navUrl);
+          final nav = NavBus.active;
+          if (nav != null) await nav.loadUrl(navUrl);
           return ToolResult.success('正在导航到 $url');
         case 'browser.back':
           await _controllerCall('goBack');

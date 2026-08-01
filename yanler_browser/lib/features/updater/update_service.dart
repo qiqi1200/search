@@ -272,12 +272,50 @@ class UpdateService {
       } catch (_) {}
     }
 
+    // 最终校验：确保下载下来的是真实 APK（魔数校验），避免损坏包进入安装器
+    if (!_isValidApk(file)) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      return '下载文件校验失败（可能被网络代理替换或下载不完整），请重试';
+    }
+
     // 调起系统安装器（open_filex 内部处理 FileProvider）
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
-      return '无法打开安装器：${result.message}';
+      final msg = switch (result.type) {
+        ResultType.noAppToOpen =>
+          '未找到可用的系统安装器。请在系统设置中允许 Yanler「安装未知应用」后重试',
+        ResultType.fileNotFound => '安装包文件丢失，请重新下载',
+        ResultType.permissionDenied => '缺少存储权限，无法打开安装包',
+        _ => result.message,
+      };
+      return '无法打开安装器：$msg';
     }
     return null;
+  }
+
+  /// 校验文件是否为有效 APK（Zip 魔数 PK\x03\x04）。
+  /// 部分镜像在反代失败时会返回 HTML 错误页（状态码仍是 200），
+  /// 若不校验会把这个损坏文件交给系统安装器导致「无法打开/解析失败」。
+  static bool _isValidApk(File file) {
+    try {
+      // APK 体积远大于几百 KB；过小的文件必是错误页/截断下载
+      if (file.lengthSync() < 512 * 1024) return false;
+      final raf = file.openSync(mode: FileMode.read);
+      try {
+        final magic = raf.readSync(4);
+        return magic.length == 4 &&
+            magic[0] == 0x50 && // P
+            magic[1] == 0x4B && // K
+            magic[2] == 0x03 &&
+            magic[3] == 0x04;
+      } finally {
+        raf.closeSync();
+      }
+    } catch (_) {
+      return false;
+    }
   }
 
   /// 单源下载到 part 文件，成功返回 null，失败返回原因字符串。
@@ -321,6 +359,10 @@ class UpdateService {
       }
       if (total > 0 && received != total) {
         return '下载不完整：$received/$total';
+      }
+      // 魔数校验：返回 HTML/错误页的源直接判失败，让其他源竞速胜出
+      if (!_isValidApk(file)) {
+        return '内容校验失败（非 APK 文件）';
       }
       return null;
     } catch (e) {

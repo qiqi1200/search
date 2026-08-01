@@ -112,18 +112,24 @@ class AgentEngine {
                 'max_tokens': 2000,
               }),
             )
-            .timeout(const Duration(seconds: 60));
+            .timeout(const Duration(seconds: 30));
       } catch (e) {
         final stopped = _cancelled || e.toString().contains('closed');
         if (stopped) return '已停止生成';
-        return '网络错误：$e';
+        if (e.toString().contains('TimeoutException')) {
+          return '请求超时（$apiUrl）。请检查 API 地址是否填对、模型是否支持工具调用，或切换网络后重试。';
+        }
+        return '网络错误（$apiUrl）：$e';
       } finally {
         if (_cancelled) client.close();
         _client = null;
       }
 
       if (response.statusCode != 200) {
-        return 'API 请求失败：${response.statusCode} ${response.body}';
+        final body = response.body.length > 300
+            ? '${response.body.substring(0, 300)}…'
+            : response.body;
+        return 'API 请求失败（$apiUrl）：${response.statusCode}\n$body';
       }
 
       final Map<String, dynamic> data;

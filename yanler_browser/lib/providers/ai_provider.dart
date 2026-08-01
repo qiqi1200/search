@@ -281,6 +281,13 @@ class AIProvider extends ChangeNotifier {
       _isProcessing = false;
       _appendAssistant(reply);
       return reply;
+    } catch (e) {
+      // 引擎内部未捕获异常（如授权回调抛错）不得静默——必须反馈给用户，
+      // 否则表现为「消息发出但 AI 无任何响应」。
+      _isProcessing = false;
+      final err = 'Agent 执行出错：$e';
+      _appendAssistant(err);
+      return err;
     } finally {
       _isProcessing = false;
       _activeEngine = null;
@@ -326,6 +333,10 @@ class AIProvider extends ChangeNotifier {
     final client = http.Client();
     _currentClient = client;
 
+    // 超时缩短到 30s：长时间「思考中」无响应的主因是端点不可达，
+    // 快速失败并给出可诊断的提示比干等 60 秒更友好。
+    const timeout = Duration(seconds: 30);
+
     try {
       final response = await client
           .post(
@@ -344,7 +355,7 @@ class AIProvider extends ChangeNotifier {
               'max_tokens': 2000,
             }),
           )
-          .timeout(const Duration(seconds: 60));
+          .timeout(timeout);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -362,7 +373,10 @@ class AIProvider extends ChangeNotifier {
       } else {
         _isProcessing = false;
         _currentClient = null;
-        final err = 'API 请求失败：${response.statusCode} ${response.body}';
+        final body = response.body.length > 300
+            ? '${response.body.substring(0, 300)}…'
+            : response.body;
+        final err = 'API 请求失败（$_apiUrl）：${response.statusCode}\n$body';
         _appendAssistant(err);
         return err;
       }
@@ -373,7 +387,13 @@ class AIProvider extends ChangeNotifier {
           e.toString().contains('Connection closed')) {
         return '已停止生成';
       }
-      final err = '网络错误：$e';
+      if (e.toString().contains('TimeoutException')) {
+        final err = '请求超时（$_apiUrl）。请检查 API 地址是否填对、模型名是否有效、'
+            '或切换可访问的网络（如校园网/代理）。';
+        _appendAssistant(err);
+        return err;
+      }
+      final err = '网络错误（$_apiUrl）：$e';
       _appendAssistant(err);
       return err;
     }

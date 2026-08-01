@@ -38,6 +38,9 @@ class _BrowserScreenState extends State<BrowserScreen>
   double _progress = 0.0;
   DateTime _lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// 上次渲染的活动标签索引 — 用于在切换标签时重置按钮状态，避免残留上一标签的旧状态
+  int _lastActiveIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -170,6 +173,54 @@ class _BrowserScreenState extends State<BrowserScreen>
     await controller.goForward();
   }
 
+  /// 构建单个标签页的内容（IndexedStack 子项）。
+  ///
+  /// - 空 URL → 新标签页；
+  /// - 有 URL → WebViewContainer，仅活动标签传 isActive=true（注册 NavBus、上报导航状态）。
+  /// 所有回调都绑定各自标签的 index，后台标签的回调不会覆盖活动标签的按钮/进度状态。
+  Widget _buildTabBody(BuildContext context, int index, BrowserProvider browser) {
+    final tab = browser.tabs[index];
+    if (tab.url.isEmpty) {
+      return NewTabPage(onSearch: _navigateTo);
+    }
+    return WebViewContainer(
+      key: ValueKey(tab.id),
+      tabId: tab.id,
+      isActive: index == browser.activeTabIndex,
+      initialUrl: tab.url,
+      onUrlChanged: (url) {
+        browser.updateTabUrl(index, url);
+      },
+      onTitleChanged: (title) {
+        if (index < 0 || index >= browser.tabs.length) return;
+        browser.updateTabTitle(index, title);
+        // 记录历史（Firefox/Chrome 同款行为）
+        final url = browser.tabs[index].url;
+        if (url.isNotEmpty) {
+          context.read<HistoryService>().add(title, url);
+        }
+      },
+      onLoadingChanged: (loading) {
+        browser.setTabLoading(index, loading);
+      },
+      onProgressChanged: (progress) {
+        // 仅活动标签驱动地址栏进度条
+        if (index == browser.activeTabIndex) {
+          _onProgressChanged(progress);
+        }
+      },
+      onNavigationStateChanged: (canBack, canFwd) {
+        // 仅活动标签更新按钮状态（WebViewContainer 内部也已按 isActive 过滤）
+        if (index == browser.activeTabIndex && mounted) {
+          setState(() {
+            _canGoBack = canBack;
+            _canGoForward = canFwd;
+          });
+        }
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<BrowserProvider, SettingsProvider>(
@@ -178,6 +229,20 @@ class _BrowserScreenState extends State<BrowserScreen>
         // 仅监听 blockedCount 变化，避免广告拦截内部状态变更导致整棵树重建
         final adblockCount = context.select<AdblockEngine, int>((e) => e.blockedCount);
         final aiActive = context.select<AIProvider, bool>((p) => p.agentMode);
+
+        // 活动标签切换时：重置按钮/进度状态，避免残留上一标签的旧状态
+        if (browser.activeTabIndex != _lastActiveIndex) {
+          _lastActiveIndex = browser.activeTabIndex;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _canGoBack = false;
+                _canGoForward = false;
+                _progress = 0.0;
+              });
+            }
+          });
+        }
 
         return Scaffold(
           body: SafeArea(
@@ -193,48 +258,24 @@ class _BrowserScreenState extends State<BrowserScreen>
                     onSubmitted: _navigateTo,
                   ),
 
-                // 页面内容
+                // 页面内容：IndexedStack 保活所有标签页的 WebView。
+                // 切标签不再销毁重建（解决卡顿），WebView 历史栈完整保留（修复前后回退）。
+                // 后台标签不注册 NavBus、不上报导航状态（WebViewContainer.isActive 控制）。
                 Expanded(
-                  child: isOnNewTab
-                      ? NewTabPage(onSearch: _navigateTo)
-                      : WebViewContainer(
-                          key: ValueKey(browser.activeTab?.id),
-                          tabId: browser.activeTab?.id ?? '',
-                          initialUrl: browser.activeTab?.url ?? '',
-                          onUrlChanged: (url) {
-                            final activeIndex = browser.activeTabIndex;
-                            if (activeIndex >= 0) {
-                              browser.updateTabUrl(activeIndex, url);
-                            }
-                          },
-                          onTitleChanged: (title) {
-                            final activeIndex = browser.activeTabIndex;
-                            if (activeIndex >= 0) {
-                              browser.updateTabTitle(activeIndex, title);
-                              // 记录历史（Firefox/Chrome 同款行为）
-                              final url = browser.activeTab?.url;
-                              if (url != null && url.isNotEmpty) {
-                                context
-                                    .read<HistoryService>()
-                                    .add(title, url);
-                              }
-                            }
-                          },
-                          onLoadingChanged: (loading) {
-                            final activeIndex = browser.activeTabIndex;
-                            if (activeIndex >= 0) {
-                              browser.setTabLoading(activeIndex, loading);
-                            }
-                          },
-                          onProgressChanged: _onProgressChanged,
-                          onNavigationStateChanged: (canBack, canFwd) {
-                            if (mounted) {
-                              setState(() {
-                                _canGoBack = canBack;
-                                _canGoForward = canFwd;
-                              });
-                            }
-                          },
+                  child: browser.tabs.isEmpty
+                      ? const SizedBox.shrink()
+                      : IndexedStack(
+                          index: browser.activeTabIndex
+                              .clamp(0, browser.tabs.length - 1),
+                          children: [
+                            // KeyedSubtree 按标签 ID 复用元素：关闭中间标签时，
+                            // 后续标签的 WebView 跟随移动而不是被销毁重建
+                            for (var i = 0; i < browser.tabs.length; i++)
+                              KeyedSubtree(
+                                key: ValueKey(browser.tabs[i].id),
+                                child: _buildTabBody(context, i, browser),
+                              ),
+                          ],
                         ),
                 ),
 

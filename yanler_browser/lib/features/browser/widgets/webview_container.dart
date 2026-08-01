@@ -10,6 +10,10 @@ import '../../reading/reading_mode_service.dart';
 class WebViewContainer extends StatefulWidget {
   final String tabId;
   final String initialUrl;
+
+  /// 是否为当前活动标签页。非活动容器不注册 NavBus、不向地址栏上报导航状态，
+  /// 由 BrowserScreen 用 IndexedStack 保活所有标签页 WebView（切标签零重建）。
+  final bool isActive;
   final Function(String) onUrlChanged;
   final Function(String) onTitleChanged;
   final Function(bool) onLoadingChanged;
@@ -23,6 +27,7 @@ class WebViewContainer extends StatefulWidget {
     super.key,
     required this.tabId,
     required this.initialUrl,
+    this.isActive = false,
     required this.onUrlChanged,
     required this.onTitleChanged,
     required this.onLoadingChanged,
@@ -62,7 +67,23 @@ class WebViewContainerState extends State<WebViewContainer>
     if (widget.initialUrl.isNotEmpty) {
       _lastRequestedUrl = widget.initialUrl;
     }
-    NavBus.register(this);
+    // 仅活动标签注册 NavBus；后台标签由 didUpdateWidget 在激活时补注册
+    if (widget.isActive) {
+      NavBus.register(this);
+    }
+  }
+
+  @override
+  void didUpdateWidget(WebViewContainer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      // 后台标签被激活：补注册 + 上报其真实导航状态（历史栈已由 IndexedStack 保活）
+      NavBus.register(this);
+      refreshNavigationState();
+    } else if (!widget.isActive && oldWidget.isActive) {
+      // 活动标签转后台：注销，NavBus 不再指向它
+      NavBus.unregister(this);
+    }
   }
 
   @override
@@ -118,6 +139,8 @@ class WebViewContainerState extends State<WebViewContainer>
   }
 
   /// 刷新前进/后退可用状态（async 安全）
+  ///
+  /// 仅活动标签才上报，避免后台标签的加载事件覆盖活动标签的按钮状态。
   @override
   Future<void> refreshNavigationState() async {
     final c = _controller;
@@ -125,7 +148,7 @@ class WebViewContainerState extends State<WebViewContainer>
     try {
       final canBack = await c.canGoBack();
       final canFwd = await c.canGoForward();
-      if (mounted) {
+      if (mounted && widget.isActive) {
         widget.onNavigationStateChanged?.call(canBack, canFwd);
       }
     } catch (_) {
@@ -215,7 +238,9 @@ class WebViewContainerState extends State<WebViewContainer>
       ),
       onWebViewCreated: (controller) {
         _controller = controller;
-        NavBus.register(this);
+        if (widget.isActive) {
+          NavBus.register(this);
+        }
         widget.onControllerReady?.call(controller);
         // 补载：控制器就绪前收到的用户意图 URL（新标签页首跳等场景兜底）
         final pending = _pendingUrl;
