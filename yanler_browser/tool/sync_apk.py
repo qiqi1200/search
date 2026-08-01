@@ -108,14 +108,15 @@ def download(url: str, dest: str) -> None:
 
 
 def prune_old_apks() -> None:
-    """D:\apk 只保留版本号最大的 yanler-*.apk，删除其余旧包。
+    """D:\apk 只保留版本号最大的 APK，删除其余旧包。
 
-    无论 APK 来自云端同步还是手动放置，都避免多版本并存。
+    兼容两种命名：脚本下载的 `yanler-1.4.2-release.apk` 与手动放置的
+    `Yanler-1.4.2.apk`。无论来源，都只保留最新版，避免多版本并存。
     """
     try:
         files = [
             f for f in os.listdir(APK_DIR)
-            if f.startswith("yanler-") and f.endswith(".apk")
+            if f.lower().startswith("yanler") and f.endswith(".apk")
         ]
     except OSError:
         return
@@ -123,7 +124,7 @@ def prune_old_apks() -> None:
         return
 
     def ver(f: str):
-        m = re.match(r"yanler-(\d+)\.(\d+)\.(\d+)-release\.apk", f)
+        m = re.search(r"(\d+)\.(\d+)\.(\d+)", f)
         return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else (0, 0, 0)
 
     files.sort(key=ver)

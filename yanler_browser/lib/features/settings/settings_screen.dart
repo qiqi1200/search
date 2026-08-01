@@ -146,23 +146,33 @@ class _SearchSection extends StatelessWidget {
                 Text('选择搜索引擎',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                ...SearchEngines.engines.map(
-                  (engine) => ListTile(
-                    leading: Image.network(
-                      engine.iconUrl,
-                      width: 24,
-                      height: 24,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.search),
-                    ),
-                    title: Text(engine.name),
-                    trailing: settings.searchEngine == engine.name
-                        ? Icon(Icons.check,
-                            color: Theme.of(context).colorScheme.primary)
-                        : null,
-                    onTap: () {
-                      settings.setSearchEngine(engine.name);
-                      Navigator.pop(sheetContext);
-                    },
+                // Flexible + ListView(shrinkWrap)：引擎较多时弹层内可滚动，
+                // 避免超出底部被系统手势条/屏幕边缘遮挡
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: SearchEngines.engines
+                        .map(
+                          (engine) => ListTile(
+                            leading: Image.network(
+                              engine.iconUrl,
+                              width: 24,
+                              height: 24,
+                              errorBuilder: (_, __, ___) =>
+                                  const Icon(Icons.search),
+                            ),
+                            title: Text(engine.name),
+                            trailing: settings.searchEngine == engine.name
+                                ? Icon(Icons.check,
+                                    color: Theme.of(context).colorScheme.primary)
+                                : null,
+                            onTap: () {
+                              settings.setSearchEngine(engine.name);
+                              Navigator.pop(sheetContext);
+                            },
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
               ],

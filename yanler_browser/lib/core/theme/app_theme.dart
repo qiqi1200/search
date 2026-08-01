@@ -63,7 +63,8 @@ class AppTheme {
       selectionHandleColor: Color(0xFF5B7FFF),
     ),
     splashFactory: InkRipple.splashFactory,
-    highlightColor: Colors.transparent,
+    // 按压缩留高光用品牌色微染——原来 transparent 导致所有可点项（设置行等）无按压反馈
+    highlightColor: const Color(0x145B7FFF),
     dividerTheme: const DividerThemeData(
       color: Color(0xFFE2DED8),
       thickness: 0.6,
@@ -155,7 +156,7 @@ class AppTheme {
       selectionHandleColor: Color(0xFF7B9FFF),
     ),
     splashFactory: InkRipple.splashFactory,
-    highlightColor: Colors.transparent,
+    highlightColor: const Color(0x167B9FFF),
     dividerTheme: const DividerThemeData(
       color: Color(0xFF2E2F34),
       thickness: 0.6,
