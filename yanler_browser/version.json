@@ -1,6 +1,6 @@
 {
-  "version": "1.4.1",
-  "build": 7,
-  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.1/Yanler-1.4.1.apk",
-  "notes": "v1.4.1 更新内容：\n- 修复广告拦截误杀CSS/字体导致网站样式丢失\n- 修复前进/后退按钮状态延迟\n- 优化UI卡顿（精确监听替代全量watch）\n- 按钮高光/水波纹效果\n- 应用图标圆角（自适应图标）\n- 聚合搜索添加Bing回退"
+  "version": "1.4.2",
+  "build": 8,
+  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.2/Yanler-1.4.2.apk",
+  "notes": "v1.4.2 更新内容：\n- 修复应用内更新安装器打不开（APK 校验 + 安装 intent 包可见性）\n- 修复 AI Agent 无响应（30s 超时定位端点/网络问题，修复工具导航不生效）\n- 修复标签页切换极其卡顿（IndexedStack 保活 WebView，切标签零重建）\n- 修复一级页面前后回退按钮失效（标签 WebView 历史栈完整保留）"
 }
