@@ -376,7 +376,7 @@ class _YanlerText extends StatelessWidget {
         ],
       ).createShader(bounds),
       child: RichText(
-        text: TextSpan(
+        text: const TextSpan(
           children: [
             TextSpan(
               text: 'Y',
