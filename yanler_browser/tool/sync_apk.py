@@ -30,6 +30,15 @@ UA = {"User-Agent": "Yanler-Apk-Sync/1.0"}
 # --quiet：失败/无更新时完全不打印（仅成功同步时输出），供定时任务 watchdog 使用
 QUIET = "--quiet" in sys.argv
 
+# 计划任务把 stdout 重定向到 GBK 编码文件；成功日志里的 `✓` 会触发
+# UnicodeEncodeError 导致 print 崩溃、脚本以非零码退出（任务误判失败）。
+# 强制 UTF-8 + errors=replace，保证任何字符都能安全打印。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass  # 非文本流或旧版 Python，忽略
+
 
 def log(msg: str, notify: bool = True) -> None:
     line = f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] {msg}"
