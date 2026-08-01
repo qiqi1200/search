@@ -39,11 +39,19 @@ class UpdateService {
   static const String _apiPath = 'https://api.github.com/repos/$_repo/releases/latest';
   static const Duration _timeout = Duration(seconds: 8);
 
-  /// 版本文件 CDN 源（国内可直达，无需翻墙）
+  /// 版本文件源（国内可直达，无需翻墙）。
+  /// jsDelivr @main 分支缓存会滞后（实测卡在旧版本数小时），因此加
+  /// gh-proxy/ghfast 等「实时回源镜像」代理 raw.githubusercontent，
+  /// 它们返回的是最新版；配合「取所有源最高版本」逻辑，只要任一源
+  /// 返回最新版就能检测到，不再依赖 jsDelivr 的新鲜度。
   static const List<String> _versionSources = [
-    // jsDelivr CDN（国内快速，主力源）
+    // jsDelivr CDN（国内快速；@main 缓存可能滞后，仅作候选）
     'https://cdn.jsdelivr.net/gh/qiqi1200/search@main/yanler_browser/version.json',
     'https://fastly.jsdelivr.net/gh/qiqi1200/search@main/yanler_browser/version.json',
+    // GitHub raw 加速镜像（实时回源，规避 jsDelivr 滞后）
+    'https://ghfast.top/https://raw.githubusercontent.com/qiqi1200/search/main/yanler_browser/version.json',
+    'https://gh-proxy.com/https://raw.githubusercontent.com/qiqi1200/search/main/yanler_browser/version.json',
+    'https://ghproxy.net/https://raw.githubusercontent.com/qiqi1200/search/main/yanler_browser/version.json',
     // GitHub raw（备用）
     'https://raw.githubusercontent.com/qiqi1200/search/main/yanler_browser/version.json',
   ];

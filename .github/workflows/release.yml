@@ -152,6 +152,12 @@ jobs:
           git add version.json
           git diff --cached --quiet && echo "✅ version.json already up-to-date" || (git commit -m "chore: auto-update version.json to ${VER}" && git push origin main)
 
+      # 强制刷新 jsDelivr @main 缓存：不 purge 的话 CDN 会滞后数小时
+      #（实测卡在旧版本），应用内更新检测会拿到旧版本号。发布后立即清理。
+      - name: Purge jsDelivr cache for version.json
+        run: |
+          curl -sS --max-time 30 "https://purge.jsdelivr.net/gh/qiqi1200/search@main/yanler_browser/version.json" || echo "jsDelivr purge 失败（不影响发布，CDN 会自然刷新）"
+
   # 可选：Windows 构建发布
   build_windows:
     name: Build & Upload Windows
