@@ -1,6 +1,7 @@
 {
-  "version": "1.4.8",
+  "version": "1.4.9",
   "build": 1,
-  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.8/Yanler-1.4.8.apk",
-  "notes": "Yanler v1.4.8 自动发布"
+  "url": "https://github.com/qiqi1200/search/releases/download/v1.4.9/Yanler-1.4.9.apk",
+  "sha256": "1beeead682c0ae6ce6ad042da51ffee239967f69a3a6b38b887519131ee630cc",
+  "notes": "Yanler v1.4.9 自动发布"
 }
