@@ -1,7 +1,7 @@
 name: yanler_browser
 description: Yanler - 极简无广告浏览器，丝滑高级AI，内置AI助手
 publish_to: 'none'
-version: 1.4.8+1
+version: 1.4.9+1
 
 environment:
   sdk: ^3.5.0
@@ -38,6 +38,7 @@ dependencies:
 
   # 图片选择（自定义壁纸）
   image_picker: ^1.1.2
+  crypto: ^3.0.7
 
 dev_dependencies:
   flutter_test:

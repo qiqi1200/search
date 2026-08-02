@@ -12,11 +12,11 @@ class SearchEngine {
 
 class SearchEngines {
   static const List<SearchEngine> engines = [
-    // Yanler Search = 内置聚合搜索，并发请求 Bing/百度/搜狗/DuckDuckGo，
-    // 统一结果页展示，点击结果直接在 WebView 加载。
+    // Yanler Search = 本地即时答案（计算/时间/农历/诗词）+ Bing 兜底。
+    // 零网络零 AI 免 VPN；通用词由 browser_screen 直接打开 cn.bing.com。
     SearchEngine(
       name: 'Yanler Search',
-      url: 'https://www.bing.com/search?q=',
+      url: 'https://cn.bing.com/search?q=',
       iconUrl: 'https://www.bing.com/favicon.ico',
     ),
     SearchEngine(

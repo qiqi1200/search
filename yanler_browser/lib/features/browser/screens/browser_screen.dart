@@ -7,7 +7,8 @@ import '../../../providers/browser_provider.dart';
 import '../../../providers/ai_provider.dart';
 import '../../../providers/settings_provider.dart';
 import '../../search/search_service.dart';
-import '../../search/search_results_page.dart';
+import '../../search/instant_answer.dart';
+import '../../search/instant_answer_page.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
 import '../../ai/ai_chat_screen.dart';
@@ -114,25 +115,40 @@ class _BrowserScreenState extends State<BrowserScreen>
         trimmed.startsWith('https://') ||
         (trimmed.contains('.') && !trimmed.contains(' '));
 
-    // Yanler Search 引擎 + 搜索词 → 打开聚合搜索结果页
+    // Yanler Search：本地即时答案（计算/时间/农历/诗词），无命中则直接 Bing 兜底。
+    // 完全本地、免 VPN、免 AI，聚合搜索已废弃。
     if (!isUrl && settings.searchEngine == 'Yanler Search') {
-      final result = await Navigator.push<String>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => SearchResultsPage(query: trimmed),
-        ),
-      );
-      // 用户点击结果项后返回 URL，继续导航
-      if (result != null && result.isNotEmpty && mounted) {
+      final answer = InstantAnswerService.tryAnswer(trimmed);
+      if (answer != null) {
+        // 命中即时答案 → 展示答案卡片，可在页内「用 Bing 继续搜索」
+        final result = await Navigator.push<String>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => InstantAnswerPage(query: trimmed, answer: answer),
+          ),
+        );
+        if (result != null && result.isNotEmpty && mounted) {
+          final browser = context.read<BrowserProvider>();
+          // 用户在答案页停留期间可能已关闭标签，防御
+          if (browser.activeTab == null) return;
+          if (browser.activeTabIndex >= 0) {
+            browser.updateTabUrl(browser.activeTabIndex, result);
+          }
+          final controller = NavBus.active;
+          if (controller != null) {
+            await controller.loadUrl(result);
+          }
+        }
+      } else {
+        // 通用词 → 直接打开 Bing（免 VPN 可用），不进中间页
+        final bingUrl = InstantAnswerPage.bingUrlFor(trimmed);
         final browser = context.read<BrowserProvider>();
-        // 用户在聚合页停留期间可能已关闭标签，防御
-        if (browser.activeTab == null) return;
         if (browser.activeTabIndex >= 0) {
-          browser.updateTabUrl(browser.activeTabIndex, result);
+          browser.updateTabUrl(browser.activeTabIndex, bingUrl);
         }
         final controller = NavBus.active;
         if (controller != null) {
-          await controller.loadUrl(result);
+          await controller.loadUrl(bingUrl);
         }
       }
       return;
@@ -265,42 +281,56 @@ class _BrowserScreenState extends State<BrowserScreen>
         }
 
         return Scaffold(
-          body: SafeArea(
-            child: Column(
-              children: [
-                // 地址栏
-                if (!isOnNewTab)
-                  AddressBar(
-                    url: browser.activeTab?.url ?? '',
-                    isLoading: browser.activeTab?.isLoading ?? false,
-                    progress: _progress,
-                    onRefresh: _onRefreshPressed,
-                    onSubmitted: _navigateTo,
+          body: Stack(
+            children: [
+              // 内容层：地址栏 + 页面（新标签页壁纸 / WebView）。
+              // 不再用外层 SafeArea 截断底部——壁纸容器延伸到屏幕最底端
+              //（含系统导航栏下方），从根上消除「壁纸止步于底部栏顶部」的黑缝。
+              Column(
+                children: [
+                  // 地址栏仅需顶部安全区（顶部圆角状态栏避让）
+                  if (!isOnNewTab)
+                    SafeArea(
+                      bottom: false,
+                      child: AddressBar(
+                        url: browser.activeTab?.url ?? '',
+                        isLoading: browser.activeTab?.isLoading ?? false,
+                        progress: _progress,
+                        onRefresh: _onRefreshPressed,
+                        onSubmitted: _navigateTo,
+                      ),
+                    ),
+
+                  // 页面内容：IndexedStack 保活所有标签页的 WebView。
+                  // 切标签不再销毁重建（解决卡顿），WebView 历史栈完整保留（修复前后回退）。
+                  // 后台标签不注册 NavBus、不上报导航状态（WebViewContainer.isActive 控制）。
+                  Expanded(
+                    child: browser.tabs.isEmpty
+                        ? const SizedBox.shrink()
+                        : IndexedStack(
+                            index: browser.activeTabIndex
+                                .clamp(0, browser.tabs.length - 1),
+                            children: [
+                              // KeyedSubtree 按标签 ID 复用元素：关闭中间标签时，
+                              // 后续标签的 WebView 跟随移动而不是被销毁重建
+                              for (var i = 0; i < browser.tabs.length; i++)
+                                KeyedSubtree(
+                                  key: ValueKey(browser.tabs[i].id),
+                                  child: _buildTabBody(context, i, browser),
+                                ),
+                            ],
+                          ),
                   ),
+                ],
+              ),
 
-                // 页面内容：IndexedStack 保活所有标签页的 WebView。
-                // 切标签不再销毁重建（解决卡顿），WebView 历史栈完整保留（修复前后回退）。
-                // 后台标签不注册 NavBus、不上报导航状态（WebViewContainer.isActive 控制）。
-                Expanded(
-                  child: browser.tabs.isEmpty
-                      ? const SizedBox.shrink()
-                      : IndexedStack(
-                          index: browser.activeTabIndex
-                              .clamp(0, browser.tabs.length - 1),
-                          children: [
-                            // KeyedSubtree 按标签 ID 复用元素：关闭中间标签时，
-                            // 后续标签的 WebView 跟随移动而不是被销毁重建
-                            for (var i = 0; i < browser.tabs.length; i++)
-                              KeyedSubtree(
-                                key: ValueKey(browser.tabs[i].id),
-                                child: _buildTabBody(context, i, browser),
-                              ),
-                          ],
-                        ),
-                ),
-
-                // 底部栏
-                BottomBar(
+              // 悬浮底部栏：Overlay 叠加在壁纸/网页之上（更高 Z 层级）。
+              // 底部栏顶部圆角与两侧透出的是壁纸本身，而非根布局黑底。
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: BottomBar(
                   tabCount: browser.tabCount,
                   isIncognito: browser.isIncognitoMode,
                   canGoBack: _canGoBack,
@@ -314,8 +344,8 @@ class _BrowserScreenState extends State<BrowserScreen>
                   onTabSwitch: () => _showTabSwitcher(context),
                   onMenu: () => _showMenu(context),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -344,56 +374,57 @@ class _BrowserScreenState extends State<BrowserScreen>
   }
 
   void _showMenu(BuildContext context) {
-    final adblock = context.read<AdblockEngine>();
-    final browser = context.read<BrowserProvider>();
-    final currentUrl = browser.activeTab?.url ?? '';
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (_) => _BottomMenuSheet(
-        adBlockCount: adblock.blockedCount,
-        canBookmark: currentUrl.isNotEmpty,
-        isDarkModeActive: context.read<SettingsProvider>().isDarkMode,
-        isIncognitoActive: browser.isIncognitoMode,
-        isAIActive: context.read<AIProvider>().agentMode,
-        onToggleTheme: () {
-          context.read<SettingsProvider>().toggleTheme();
-          // 不关闭菜单，允许用户连续操作
-        },
-        onOpenSettings: () {
-          Navigator.pop(context);
-          _openSettings(context);
-        },
-        onToggleIncognito: () {
-          context.read<BrowserProvider>().toggleIncognito();
-          // 不关闭菜单，允许用户连续操作
-        },
-        onToggleAI: () {
-          Navigator.pop(context);
-          _openAIChat(context);
-        },
-        onOpenBookmarks: () {
-          Navigator.pop(context);
-          _openBookmarks(context);
-        },
-        onOpenHistory: () {
-          Navigator.pop(context);
-          _openHistory(context);
-        },
-        onAddBookmark: () {
-          final title = browser.activeTab?.title ?? '未命名';
-          context.read<BookmarkService>().add(title, currentUrl);
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('已收藏到书签'),
-              duration: Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        },
-      ),
+      // 用 sheet 自身的 context watch：Provider 变化（深色/无痕/AI 开关、
+      // 广告拦截计数）时弹窗内按钮高亮与计数实时刷新，而非打开瞬间的快照。
+      builder: (sheetContext) {
+        final settings = sheetContext.watch<SettingsProvider>();
+        final browser = sheetContext.watch<BrowserProvider>();
+        final ai = sheetContext.watch<AIProvider>();
+        final adblock = sheetContext.watch<AdblockEngine>();
+        final currentUrl = browser.activeTab?.url ?? '';
+
+        return _BottomMenuSheet(
+          adBlockCount: adblock.blockedCount,
+          canBookmark: currentUrl.isNotEmpty,
+          isDarkModeActive: settings.isDarkMode,
+          isIncognitoActive: browser.isIncognitoMode,
+          isAIActive: ai.agentMode,
+          // 开关类操作不关闭菜单，允许用户连续操作；状态经 watch 实时回显
+          onToggleTheme: () => settings.toggleTheme(),
+          onOpenSettings: () {
+            Navigator.pop(sheetContext);
+            _openSettings(context);
+          },
+          onToggleIncognito: () => browser.toggleIncognito(),
+          onToggleAI: () {
+            Navigator.pop(sheetContext);
+            _openAIChat(context);
+          },
+          onOpenBookmarks: () {
+            Navigator.pop(sheetContext);
+            _openBookmarks(context);
+          },
+          onOpenHistory: () {
+            Navigator.pop(sheetContext);
+            _openHistory(context);
+          },
+          onAddBookmark: () {
+            final title = browser.activeTab?.title ?? '未命名';
+            context.read<BookmarkService>().add(title, currentUrl);
+            Navigator.pop(sheetContext);
+            ScaffoldMessenger.of(sheetContext).showSnackBar(
+              const SnackBar(
+                content: Text('已收藏到书签'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

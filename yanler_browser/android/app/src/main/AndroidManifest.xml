@@ -54,5 +54,11 @@
         </intent>
         <package android:name="com.android.packageinstaller"/>
         <package android:name="com.google.android.packageinstaller"/>
+        <!-- 自定义 scheme 外跳（weixin://、alipays://、baiduboxapp://、tel: 等）：
+             Android 11+ 包可见性下必须声明 VIEW intent 才能 resolve 到对应 App，
+             否则 url_launcher 一律判定「未安装」（即使 App 已装）。 -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+        </intent>
     </queries>
 </manifest>

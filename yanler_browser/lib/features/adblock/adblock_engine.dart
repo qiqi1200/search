@@ -18,6 +18,20 @@ class AdblockEngine extends ChangeNotifier {
   static const int _maxExceptionRules = 5000;
   static const int _maxUrlRules = 2000;
 
+  // ==================== 广告/追踪路径匹配（精准，不误杀） ====================
+  // 只匹配「URL 路径段 / 文件名」，绝不匹配主机名、绝不做任意子串通配——
+  // 否则 /read/ /load/ /blog/ 等合法路径会整站误杀（铁律见文件头注释）。
+  static const Set<String> _adPathKeywords = {
+    'ad', 'ads', 'banner', 'pop', 'popup',
+    'track', 'tracking', 'analytics', 'telemetry',
+  };
+
+  // 文件名「以关键词结尾」的强匹配词（几乎只出现在追踪/统计脚本上，
+  // 如 google-analytics.js、sitetracking.js），相对激进但误伤极低。
+  static const Set<String> _adPathSuffixKeywords = {
+    'tracking', 'analytics', 'telemetry', 'ads', 'popup',
+  };
+
   bool _isInitialized = false;
   bool _isEnabled = true;
   int _blockedCount = 0;
@@ -429,6 +443,12 @@ class AdblockEngine extends ChangeNotifier {
         return true;
       }
     }
+
+    // 路径段 / 文件后缀精准匹配（广告/弹窗/追踪/统计）
+    if (_matchesAdPath(urlLower)) {
+      _incrementBlock(url);
+      return true;
+    }
     return false;
   }
 
@@ -472,6 +492,49 @@ class AdblockEngine extends ChangeNotifier {
       final parent = host.substring(dot + 1);
       if (domains.contains(parent)) return true;
       dot = host.indexOf('.', dot + 1);
+    }
+    return false;
+  }
+
+  /// 路径段 / 文件后缀匹配：命中 `/ads/`、`/banner/`、`ad.js`、
+  /// `analytics.min.js`、`google-analytics.js` 等广告/追踪资源。
+  ///
+  /// 安全边界：只扫描 host 之后的路径，且仅做「段精确匹配 / 文件名主体匹配 /
+  /// 以追踪词结尾」，绝不按任意子串扫（否则 /read/ 含 "ad" 也中招）。
+  bool _matchesAdPath(String urlLower) {
+    var s = urlLower;
+    final schemeIdx = s.indexOf('://');
+    if (schemeIdx >= 0) {
+      s = s.substring(schemeIdx + 3);
+    } else if (s.startsWith('//')) {
+      s = s.substring(2);
+    }
+    // 定位 path 起点（host 之后的第一个 / ? #）
+    var pathStart = -1;
+    for (var i = 0; i < s.length; i++) {
+      final c = s.codeUnitAt(i);
+      if (c == 47 || c == 63 || c == 35) { // / ? #
+        pathStart = i;
+        break;
+      }
+    }
+    if (pathStart < 0) return false;
+    final path = s.substring(pathStart);
+
+    for (final seg in path.split('/')) {
+      if (seg.isEmpty) continue;
+      // 路径段精确命中（如 /ads/、/banner/、/popup/）
+      if (_adPathKeywords.contains(seg)) return true;
+      // 文件名主体命中（如 ad.js、banner.png、analytics.min.js）
+      final dot = seg.indexOf('.');
+      if (dot > 0) {
+        final stem = seg.substring(0, dot);
+        if (_adPathKeywords.contains(stem)) return true;
+      }
+      // 文件名以追踪词结尾（如 google-analytics.js），排除与词等长的自身
+      for (final kw in _adPathSuffixKeywords) {
+        if (seg.length > kw.length && seg.endsWith(kw)) return true;
+      }
     }
     return false;
   }

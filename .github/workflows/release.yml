@@ -3,8 +3,9 @@ name: Auto Release APK
 on:
   push:
     tags: ['v*']
-  release:
-    types: [published]
+  # 注意：不再监听 release:published——softprops 发布 Release 会再触发一次本工作流，
+  # 导致同一 tag 重复构建并覆盖同一 URL 的 APK（内容变动 → 镜像缓存旧包，应用内
+  # 更新竞速可能装到旧版本）。tag 推送即足够，一次发布一次构建。
   workflow_dispatch:
     inputs:
       version:
@@ -111,6 +112,29 @@ jobs:
           mkdir -p release_assets
           cp build/app/outputs/flutter-apk/app-release.apk "release_assets/Yanler-${VER}.apk"
 
+      - name: Compute APK SHA-256
+        id: apk_sha
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          SHA=$(sha256sum "release_assets/Yanler-${VER}.apk" | awk '{print $1}')
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "✅ APK SHA-256: ${SHA}"
+
+      # 防重发布：同一 tag 的 Release 已存在则直接失败。复用 Release URL 会让
+      # ghfast/gh-proxy 等镜像命中旧包缓存 → 「提示新版本、装完还是老的」。
+      # 每次发布必须升版本号（新 tag = 新 URL = 镜像无缓存）。
+      - name: 'Guard: refuse re-releasing existing tag'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          if gh api "repos/${{ github.repository }}/releases/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Release ${TAG} 已存在。请递增版本号（pubspec.yaml + 新 tag）后重试，禁止重复发布同版本，否则镜像缓存旧包导致更新装错。"
+            exit 1
+          fi
+          echo "✅ ${TAG} 尚未发布，继续"
+
       # 自动创建/更新 Release 并上传通用 APK（应用内更新检查 latest 即取此包）
       - name: Create / Update Release & Upload APK
         uses: softprops/action-gh-release@v2
@@ -146,6 +170,7 @@ jobs:
             "version": "${VER}",
             "build": ${BUILD},
             "url": "${APK_URL}",
+            "sha256": "${{ steps.apk_sha.outputs.sha256 }}",
             "notes": "Yanler ${TAG} 自动发布"
           }
           EOF

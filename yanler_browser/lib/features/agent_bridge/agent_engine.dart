@@ -60,11 +60,11 @@ class AgentEngine {
 
   /// 破坏性操作（smart 模式下需要用户确认）
   static const Set<String> _destructive = {
-    'bookmarks.remove',
-    'history.clear',
-    'settings.set',
-    'adblock.toggle',
-    'browser.close_tab',
+    'bookmarks_remove',
+    'history_clear',
+    'settings_set',
+    'adblock_toggle',
+    'browser_close_tab',
   };
 
   void cancel() {
@@ -176,7 +176,8 @@ class AgentEngine {
       for (final tc in toolCalls) {
         if (_cancelled) return '已停止生成';
         final fn = tc['function'] as Map<String, dynamic>? ?? {};
-        final name = fn['name'] as String? ?? '';
+        // 模型可能返回非法工具名（旧版缓存会话等），清洗后再分发
+        final name = _sanitizeToolName(fn['name'] as String? ?? '');
         Map<String, Object?> args;
         try {
           args = (jsonDecode(fn['arguments'] as String? ?? '{}')
@@ -223,11 +224,18 @@ class AgentEngine {
     return '任务步骤过多已自动结束。如果还没完成，请告诉我继续。';
   }
 
+  /// 工具名清洗：DeepSeek 等 OpenAI 兼容端点要求 function.name 只含
+  /// `[a-zA-Z0-9_-]`（点号/中文/空格/斜杠都会触发
+  /// 「Invalid 'tools[].function.name'」400）。统一替换为 `_`，
+  /// 保证发给 API 的工具名永远合法。
+  static String _sanitizeToolName(String name) =>
+      name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+
   /// OpenAI 兼容工具 schema
   Map<String, Object> _toOpenAiTool(MCPTool tool) => {
         'type': 'function',
         'function': {
-          'name': tool.name,
+          'name': _sanitizeToolName(tool.name),
           'description': tool.description,
           'parameters': tool.inputSchema,
         },

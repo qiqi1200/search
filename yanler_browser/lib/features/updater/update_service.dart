@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -16,10 +17,16 @@ class UpdateInfo {
   final String url;
   final String notes;
 
+  /// 期望 APK 的 SHA-256（由发布 workflow 写入 version.json）。
+  /// 下载后比对，防止镜像命中旧缓存、装到与版本号不符的旧包
+  ///（「提示新版本，装完还是老的」的根因）。为空则跳过校验（向后兼容）。
+  final String sha256;
+
   const UpdateInfo({
     required this.version,
     required this.url,
     required this.notes,
+    this.sha256 = '',
   });
 }
 
@@ -81,8 +88,18 @@ class UpdateService {
       if (completer.isCompleted) return;
       if (result != null) {
         final v = result['version'] as String? ?? '';
-        if (best == null || _isNewer(v, best!['version'] as String? ?? '')) {
+        if (best == null) {
           best = result;
+        } else {
+          final bestV = best!['version'] as String? ?? '';
+          // 版本更高 → 替换；版本相同但新结果带 sha256 而旧结果没有 → 替换
+          //（带 sha 的通常是实时镜像/新 version.json，可校验内容新鲜度）
+          final sameVersion = v == bestV;
+          final hasSha = (result['sha256'] as String? ?? '').isNotEmpty;
+          final bestHasSha = (best!['sha256'] as String? ?? '').isNotEmpty;
+          if (_isNewer(v, bestV) || (sameVersion && hasSha && !bestHasSha)) {
+            best = result;
+          }
         }
       }
       pending--;
@@ -178,9 +195,15 @@ class UpdateService {
       }
 
       final notes = (info['notes'] as String? ?? '').trim();
+      final sha256 = (info['sha256'] as String? ?? '').trim().toLowerCase();
       return UpdateCheckResult(
         info: _isNewer(tag, current)
-            ? UpdateInfo(version: tag, url: url, notes: notes)
+            ? UpdateInfo(
+                version: tag,
+                url: url,
+                notes: notes,
+                sha256: sha256,
+              )
             : null,
       );
     } catch (e) {
@@ -217,6 +240,7 @@ class UpdateService {
   /// 当某个源速度明显领先时，取消其他源以节省带宽。
   static Future<String?> downloadAndInstall(
     String url, {
+    String expectedSha256 = '',
     ValueChanged<double>? onProgress,
     ValueChanged<double>? onSpeed,
   }) async {
@@ -303,6 +327,20 @@ class UpdateService {
       return '下载文件校验失败（可能被网络代理替换或下载不完整），请重试';
     }
 
+    // SHA-256 内容校验：防「提示新版本，装完还是老的」。
+    // 部分镜像（ghfast/gh-proxy 等）对同一 Release URL 缓存旧 APK，
+    // 竞速时可能把旧包带进来——魔数校验通过但内容是旧版本。比对哈希可拒绝。
+    if (expectedSha256.isNotEmpty) {
+      final real = _sha256Of(file);
+      if (real != expectedSha256.toLowerCase()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        return '安装包校验失败（内容与服务器不一致，可能是镜像缓存的旧包），'
+            '请稍后重试';
+      }
+    }
+
     // 调起系统安装器（open_filex 内部处理 FileProvider）
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
@@ -316,6 +354,15 @@ class UpdateService {
       return '无法打开安装器：$msg';
     }
     return null;
+  }
+
+  /// 计算文件 SHA-256（十六进制小写）。失败返回空串。
+  static String _sha256Of(File file) {
+    try {
+      return sha256.convert(file.readAsBytesSync()).toString();
+    } catch (_) {
+      return '';
+    }
   }
 
   /// 校验文件是否为有效 APK（Zip 魔数 PK\x03\x04）。
@@ -559,6 +606,7 @@ class _UpdateDialog extends StatelessWidget {
 
     final error = await UpdateService.downloadAndInstall(
       info.url,
+      expectedSha256: info.sha256,
       onProgress: (p) => progress.value = p,
       onSpeed: (s) => speed.value = s,
     );

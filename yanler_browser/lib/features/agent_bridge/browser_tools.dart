@@ -62,12 +62,12 @@ class BrowserTools {
 
   static const List<MCPTool> _definitions = [
     MCPTool(
-      name: 'browser.list_tabs',
+      name: 'browser_list_tabs',
       description: '列出所有标签页（id/标题/URL/是否激活）',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.open_tab',
+      name: 'browser_open_tab',
       description: '在新标签页打开网址',
       inputSchema: {
         'type': 'object',
@@ -76,7 +76,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.close_tab',
+      name: 'browser_close_tab',
       description: '关闭指定标签页（tabId 为列表中的索引）',
       inputSchema: {
         'type': 'object',
@@ -85,7 +85,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.switch_tab',
+      name: 'browser_switch_tab',
       description: '切换到指定标签页',
       inputSchema: {
         'type': 'object',
@@ -94,7 +94,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.search',
+      name: 'browser_search',
       description: '使用当前默认搜索引擎搜索关键词',
       inputSchema: {
         'type': 'object',
@@ -103,7 +103,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.navigate',
+      name: 'browser_navigate',
       description: '在当前标签页导航到指定网址',
       inputSchema: {
         'type': 'object',
@@ -112,32 +112,32 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.back',
+      name: 'browser_back',
       description: '当前标签页后退',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.forward',
+      name: 'browser_forward',
       description: '当前标签页前进',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.reload',
+      name: 'browser_reload',
       description: '刷新当前标签页',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.get_active_tab',
+      name: 'browser_get_active_tab',
       description: '获取当前激活标签页的 URL 和标题',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.get_page_text',
+      name: 'browser_get_page_text',
       description: '读取当前页面正文文本（AI 阅读理解网页内容用）',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'browser.click',
+      name: 'browser_click',
       description: '点击页面元素（CSS 选择器，如 button[type=submit]、a[href*=news]）',
       inputSchema: {
         'type': 'object',
@@ -146,7 +146,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.type',
+      name: 'browser_type',
       description: '向页面输入框输入文字（CSS 选择器定位输入框）',
       inputSchema: {
         'type': 'object',
@@ -158,7 +158,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.scroll',
+      name: 'browser_scroll',
       description: '滚动当前页面（up/down/top/bottom）',
       inputSchema: {
         'type': 'object',
@@ -167,17 +167,17 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'browser.get_page_screenshot',
+      name: 'browser_get_page_screenshot',
       description: '截取当前页面（返回 base64 PNG，AI 看图用）',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'bookmarks.list',
+      name: 'bookmarks_list',
       description: '列出全部书签',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'bookmarks.add',
+      name: 'bookmarks_add',
       description: '添加书签',
       inputSchema: {
         'type': 'object',
@@ -189,7 +189,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'bookmarks.remove',
+      name: 'bookmarks_remove',
       description: '按 id 删除书签',
       inputSchema: {
         'type': 'object',
@@ -198,7 +198,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'history.list',
+      name: 'history_list',
       description: '列出历史记录（可带关键词过滤）',
       inputSchema: {
         'type': 'object',
@@ -207,12 +207,12 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'history.clear',
+      name: 'history_clear',
       description: '清空全部历史记录',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'settings.get',
+      name: 'settings_get',
       description: '读取浏览器设置（searchEngine/theme/adblock/wallpaper/homepage）',
       inputSchema: {
         'type': 'object',
@@ -221,7 +221,7 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'settings.set',
+      name: 'settings_set',
       description: '修改浏览器设置（searchEngine/theme/adblock/wallpaper/homepage）',
       inputSchema: {
         'type': 'object',
@@ -233,12 +233,12 @@ class BrowserTools {
       },
     ),
     MCPTool(
-      name: 'adblock.status',
+      name: 'adblock_status',
       description: '查询广告过滤状态',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
     MCPTool(
-      name: 'adblock.toggle',
+      name: 'adblock_toggle',
       description: '切换广告过滤开关',
       inputSchema: {'type': 'object', 'properties': {}, 'required': []},
     ),
@@ -248,9 +248,12 @@ class BrowserTools {
 
   /// 执行工具调用。name 为工具名，args 为参数（JSON）。
   Future<ToolResult> call(String name, Map<String, Object?> args) async {
+    // 防御：模型返回的工具名可能带点号/中文等非法字符（DeepSeek 只接受
+    // ^[a-zA-Z0-9_-]+$），统一清洗成 snake_case 再分发，兼容新旧命名。
+    final safeName = name.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
     try {
-      switch (name) {
-        case 'browser.list_tabs':
+      switch (safeName) {
+        case 'browser_list_tabs':
           return ToolResult.success(jsonEncode(browser.tabs.asMap().entries.map((e) => {
                 'tabId': e.key,
                 'title': e.value.title,
@@ -258,22 +261,22 @@ class BrowserTools {
                 'active': e.key == browser.activeTabIndex,
                 'loading': e.value.isLoading,
               }).toList()));
-        case 'browser.open_tab':
+        case 'browser_open_tab':
           final url = _str(args, 'url');
           if (url.isEmpty) return const ToolResult.error('缺少 url 参数');
           browser.addTab(url: _normalizeUrl(url));
           return ToolResult.success('已在新标签页打开 $url');
-        case 'browser.close_tab':
+        case 'browser_close_tab':
           final id = args['tabId'];
           if (id is! num) return const ToolResult.error('缺少 tabId 参数');
           browser.closeTab(id.toInt());
           return ToolResult.success('已关闭标签页 ${id.toInt()}');
-        case 'browser.switch_tab':
+        case 'browser_switch_tab':
           final id = args['tabId'];
           if (id is! num) return const ToolResult.error('缺少 tabId 参数');
           browser.switchTab(id.toInt());
           return ToolResult.success('已切换到标签页 ${id.toInt()}');
-        case 'browser.search':
+        case 'browser_search':
           final q = _str(args, 'query');
           if (q.isEmpty) return const ToolResult.error('缺少 query 参数');
           final engine = SearchEngines.byName(settings.searchEngine);
@@ -283,7 +286,7 @@ class BrowserTools {
           final searchNav = NavBus.active;
           if (searchNav != null) await searchNav.loadUrl(searchUrl);
           return ToolResult.success('已搜索：$q（引擎：${engine.name}）');
-        case 'browser.navigate':
+        case 'browser_navigate':
           final url = _str(args, 'url');
           if (url.isEmpty) return const ToolResult.error('缺少 url 参数');
           final navUrl = _normalizeUrl(url);
@@ -291,31 +294,31 @@ class BrowserTools {
           final nav = NavBus.active;
           if (nav != null) await nav.loadUrl(navUrl);
           return ToolResult.success('正在导航到 $url');
-        case 'browser.back':
+        case 'browser_back':
           await _controllerCall('goBack');
           return const ToolResult.success('已后退');
-        case 'browser.forward':
+        case 'browser_forward':
           await _controllerCall('goForward');
           return const ToolResult.success('已前进');
-        case 'browser.reload':
+        case 'browser_reload':
           await _controllerCall('reload');
           return const ToolResult.success('已刷新');
-        case 'browser.get_active_tab':
+        case 'browser_get_active_tab':
           final tab = browser.activeTab;
           return ToolResult.success(jsonEncode({
             'title': tab?.title ?? '',
             'url': tab?.url ?? '',
             'loading': tab?.isLoading ?? false,
           }));
-        case 'browser.get_page_text':
+        case 'browser_get_page_text':
           return await _evalJs('(function(){return document.body ? document.body.innerText.slice(0, 20000) : ""})()');
-        case 'browser.click':
+        case 'browser_click':
           final sel = _str(args, 'selector');
           if (sel.isEmpty) return const ToolResult.error('缺少 selector 参数');
           return await _evalJs(
               '(function(){var el=document.querySelector(${_jsQuote(sel)});'
               'if(!el) return "NOT_FOUND: $sel"; el.click(); return "CLICKED: $sel";})()');
-        case 'browser.type':
+        case 'browser_type':
           final sel = _str(args, 'selector');
           final text = _str(args, 'text');
           if (sel.isEmpty) return const ToolResult.error('缺少 selector 参数');
@@ -324,7 +327,7 @@ class BrowserTools {
               'if(!el) return "NOT_FOUND: $sel"; el.focus(); el.value=${_jsQuote(text)};'
               'el.dispatchEvent(new Event("input",{bubbles:true}));'
               'el.dispatchEvent(new Event("change",{bubbles:true})); return "TYPED";})()');
-        case 'browser.scroll':
+        case 'browser_scroll':
           final dir = _str(args, 'direction');
           return await _evalJs(
               '(function(){var d=${_jsQuote(dir)};'
@@ -332,42 +335,42 @@ class BrowserTools {
               'else if(d==="bottom")window.scrollTo(0,document.body?document.body.scrollHeight:0);'
               'else window.scrollBy(0, d==="up"?-window.innerHeight*0.8:window.innerHeight*0.8);'
               'return "SCROLLED:"+d;})()');
-        case 'browser.get_page_screenshot':
+        case 'browser_get_page_screenshot':
           final shot = await _takeScreenshot();
           return ToolResult.success(shot);
-        case 'bookmarks.list':
+        case 'bookmarks_list':
           return ToolResult.success(jsonEncode(bookmarks.bookmarks
               .map((b) => {'id': b.id, 'title': b.title, 'url': b.url})
               .toList()));
-        case 'bookmarks.add':
+        case 'bookmarks_add':
           final title = _str(args, 'title');
           final url = _str(args, 'url');
           if (url.isEmpty) return const ToolResult.error('缺少 url 参数');
           await bookmarks.add(title.isEmpty ? url : title, _normalizeUrl(url));
           return const ToolResult.success('书签已添加');
-        case 'bookmarks.remove':
+        case 'bookmarks_remove':
           final id = _str(args, 'id');
           if (id.isEmpty) return const ToolResult.error('缺少 id 参数');
           await bookmarks.remove(id);
           return const ToolResult.success('书签已删除');
-        case 'history.list':
+        case 'history_list':
           final q = _str(args, 'query');
           final items = q.isEmpty ? history.history : history.search(q);
           return ToolResult.success(jsonEncode(items
               .take(100)
               .map((h) => {'title': h.title, 'url': h.url, 'visitedAt': h.visitedAt.toIso8601String()})
               .toList()));
-        case 'history.clear':
+        case 'history_clear':
           await history.clear();
           return const ToolResult.success('历史已清空');
-        case 'settings.get':
+        case 'settings_get':
           return ToolResult.success(jsonEncode({'value': _getSetting(_str(args, 'key'))}));
-        case 'settings.set':
+        case 'settings_set':
           await _setSetting(_str(args, 'key'), _str(args, 'value'));
           return const ToolResult.success('设置已更新');
-        case 'adblock.status':
+        case 'adblock_status':
           return ToolResult.success(jsonEncode({'enabled': settings.adblockEnabled}));
-        case 'adblock.toggle':
+        case 'adblock_toggle':
           settings.setAdblockEnabled(!settings.adblockEnabled);
           return ToolResult.success('广告过滤已${settings.adblockEnabled ? '开启' : '关闭'}');
         default:

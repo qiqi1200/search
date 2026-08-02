@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/settings_provider.dart';
 import '../../adblock/adblock_engine.dart';
@@ -262,6 +263,33 @@ class WebViewContainerState extends State<WebViewContainer>
     }
   }
 
+  /// 自定义 scheme（非 http/https）→ 拦截 WebView 加载，改由系统外部应用处理。
+  ///
+  /// 修复 `net::ERR_UNKNOWN_URL_SCHEME` 错误页：默认 WebView 对
+  /// `baiduboxapp://`、`alipays://`、`weixin://`、`tel:`、`mailto:` 等
+  /// 未知协议会渲染红色错误页。这里统一拦下并交给 url_launcher 走系统
+  /// Intent 调起第三方 App；未安装对应应用时轻量 Toast 提示，绝不落入错误页。
+  void _handleExternalScheme(String url) {
+    launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)
+        .then((ok) {
+      if (!ok && mounted) _toast('未安装对应应用');
+    }).catchError((Object e) {
+      if (mounted) _toast('未安装对应应用');
+    });
+  }
+
+  void _toast(String msg) {
+    _safeBrowserNotify(() {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    });
+  }
+
   Future<void> _doLoad(InAppWebViewController c, String url) async {
     if (url.isEmpty) return;
     _pendingUrl = null;
@@ -310,6 +338,25 @@ class WebViewContainerState extends State<WebViewContainer>
           _doLoad(controller, pending);
         }
         refreshNavigationState();
+      },
+      // 自定义协议拦截：http/https 在 WebView 内正常加载；其余协议
+      //（baiduboxapp://、alipays://、weixin://、tel:、mailto: 等）一律
+      // 拦下并转系统外部应用，避免渲染 ERR_UNKNOWN_URL_SCHEME 错误页。
+      shouldOverrideUrlLoading: (controller, navigationAction) async {
+        final url = navigationAction.request.url?.toString() ?? '';
+        if (url.isEmpty) return NavigationActionPolicy.ALLOW;
+        final scheme = Uri.tryParse(url)?.scheme.toLowerCase() ?? '';
+        if (scheme == 'http' ||
+            scheme == 'https' ||
+            scheme == 'about' ||
+            scheme == 'data' ||
+            scheme == 'javascript' ||
+            scheme == 'blob' ||
+            scheme == 'file') {
+          return NavigationActionPolicy.ALLOW;
+        }
+        _handleExternalScheme(url);
+        return NavigationActionPolicy.CANCEL;
       },
       shouldInterceptRequest: (controller, request) async {
         // 主框架请求绝不拦截：广告过滤只作用于子资源，
