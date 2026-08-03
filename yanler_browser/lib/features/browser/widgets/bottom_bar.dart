@@ -38,8 +38,12 @@ class BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    // 系统导航栏高度（三键 ~48dp / 手势 ~24-32dp），edge-to-edge 下必须避让，
+    // 否则工具栏会绘制进导航栏区域，与系统返回/主页键重叠。
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    // 实色底栏：顶部圆角 + 1px 顶边
+    // 实色底栏：顶部圆角 + 1px 顶边。
+    // 背景仍延伸到屏幕底（壁纸风格 edge-to-edge），仅内容区避开系统导航栏。
     return YanlerSurface(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
       elevated: false,
@@ -48,7 +52,8 @@ class BottomBar extends StatelessWidget {
           left: 4,
           right: 4,
           top: 6,
-          bottom: MediaQuery.of(context).padding.bottom > 0 ? 4 : 8,
+          // 有导航栏：inset + 4px 视觉间距；无导航栏：8px 常规内边距
+          bottom: bottomInset > 0 ? bottomInset + 4 : 8,
         ),
         child: Row(
           children: [

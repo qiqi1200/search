@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 自适应图标背景色（Yanler 品牌深蓝紫） -->
-    <color name="ic_launcher_background">#1A1A2E</color>
+    <!-- 自适应图标背景色（纯白，主体走 foreground 安全区） -->
+    <color name="ic_launcher_background">#FFFFFF</color>
 </resources>
