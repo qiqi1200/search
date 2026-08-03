@@ -143,6 +143,7 @@ class UpdateService {
           final tag = (data['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
           final assets = (data['assets'] as List? ?? []);
           String? url;
+          String? sha256;
           for (final a in assets) {
             final name = (a['name'] as String? ?? '').toLowerCase();
             if (name.endsWith('.apk') &&
@@ -150,6 +151,14 @@ class UpdateService {
                 !name.contains('arm64') &&
                 !name.contains('x86_64')) {
               url = a['browser_download_url'] as String?;
+              // GitHub 资产自带权威 digest（"sha256:<hex>"）。
+              // 必须带上：若 CDN 源（jsDelivr/fastly）缓存滞后返回旧版，
+              // API 源成为最高版本时若无 sha，下载将跳过 SHA-256 校验，
+              // 镜像缓存的旧 APK 会被安装（「提示新版本，装完还是老的」）。
+              final digest = a['digest'] as String? ?? '';
+              if (digest.startsWith('sha256:')) {
+                sha256 = digest.substring('sha256:'.length).toLowerCase();
+              }
               break;
             }
           }
@@ -158,6 +167,7 @@ class UpdateService {
               'version': tag,
               'url': url,
               'notes': (data['body'] as String? ?? '').trim(),
+              if (sha256 != null && sha256.isNotEmpty) 'sha256': sha256,
             });
             return;
           }
