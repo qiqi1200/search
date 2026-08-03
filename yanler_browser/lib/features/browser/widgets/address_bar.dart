@@ -160,7 +160,7 @@ class _AddressBarState extends State<AddressBar> {
                                 : Icons.lock_open_rounded,
                             size: 14,
                             color: widget.url.startsWith('https')
-                                ? const Color(0xFF34C759)
+                                ? theme.colorScheme.primary
                                 : theme.colorScheme.onSurfaceVariant,
                           ),
                   ),

@@ -150,7 +150,7 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-/// AI 中心按钮 — 渐变圆形，Agent 模式开启时高亮描边
+/// AI 中心按钮 — 黛蓝→青 双色圆形（2026-08：去掉蓝紫粉三色渐变），Agent 模式开启时高亮描边
 class _AICenterButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDark;
@@ -174,14 +174,12 @@ class _AICenterButton extends StatelessWidget {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
+          gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF5B7FFF),
-              Color(0xFF8B5CFF),
-              Color(0xFFFF5C7B),
-            ],
+            colors: isDark
+                ? const [Color(0xFF5D7BE8), Color(0xFF3BAE9C)]
+                : const [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
           ),
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
@@ -192,13 +190,14 @@ class _AICenterButton extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF8B5CFF).withValues(alpha: 0.22),
+              color: const Color(0xFF3A5CCC).withValues(alpha: 0.25),
               blurRadius: 14,
               offset: const Offset(0, 4),
             ),
             if (active)
               BoxShadow(
-                color: const Color(0xFF34C759).withValues(alpha: 0.5),
+                color: (isDark ? const Color(0xFF4CBB84) : const Color(0xFF2F9E63))
+                    .withValues(alpha: 0.5),
                 blurRadius: 14,
               ),
           ],
@@ -218,12 +217,13 @@ class _AICenterButton extends StatelessWidget {
               child: Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF34C759),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF4CBB84) : const Color(0xFF2F9E63),
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Color(0x8034C759),
+                      color: (isDark ? const Color(0xFF4CBB84) : const Color(0xFF2F9E63))
+                          .withValues(alpha: 0.5),
                       blurRadius: 4,
                     ),
                   ],

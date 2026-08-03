@@ -24,11 +24,12 @@ class InstantAnswerPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    // 单强调色：所有即时答案统一使用主题 primary（2026-08 收敛彩色渐变）
     final (icon, color) = switch (answer.kind) {
-      InstantAnswerKind.calculator => (Icons.calculate_rounded, const Color(0xFF5B7FFF)),
-      InstantAnswerKind.time => (Icons.schedule_rounded, const Color(0xFF00A3E0)),
-      InstantAnswerKind.lunar => (Icons.nightlight_round, const Color(0xFF8B5CFF)),
-      InstantAnswerKind.poem => (Icons.auto_stories_rounded, const Color(0xFFFF8E53)),
+      InstantAnswerKind.calculator => (Icons.calculate_rounded, theme.colorScheme.primary),
+      InstantAnswerKind.time => (Icons.schedule_rounded, theme.colorScheme.primary),
+      InstantAnswerKind.lunar => (Icons.nightlight_round, theme.colorScheme.primary),
+      InstantAnswerKind.poem => (Icons.auto_stories_rounded, theme.colorScheme.primary),
     };
 
     return Scaffold(
@@ -87,9 +88,7 @@ class InstantAnswerPage extends StatelessWidget {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-                        ),
+                        color: theme.colorScheme.primary,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Text(
@@ -195,7 +194,7 @@ class InstantAnswerPage extends StatelessWidget {
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 13),
-                      backgroundColor: const Color(0xFF5B7FFF),
+                      backgroundColor: theme.colorScheme.primary,
                     ),
                     onPressed: () =>
                         Navigator.pop(context, bingUrlFor(query)),

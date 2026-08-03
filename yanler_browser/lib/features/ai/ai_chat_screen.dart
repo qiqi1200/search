@@ -146,7 +146,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.auto_awesome_rounded, size: 18, color: Color(0xFF8B5CFF)),
+            const Icon(Icons.auto_awesome_rounded, size: 18, color: Color(0xFF3A5CCC)),
             const SizedBox(width: 8),
             const Text('AI 助手'),
             if (ai.agentMode)
@@ -157,7 +157,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                      colors: [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -306,7 +306,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                       const SizedBox(width: 8),
                       FilledButton(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF5B7FFF),
+                          backgroundColor: const Color(0xFF3A5CCC),
                           padding: const EdgeInsets.symmetric(horizontal: 18),
                         ),
                         onPressed: () async {
@@ -378,13 +378,13 @@ class _AIChatScreenState extends State<AIChatScreen> {
                         gradient: ai.isProcessing
                             ? null
                             : const LinearGradient(
-                                colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+                                colors: [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
                               ),
                         color: ai.isProcessing ? const Color(0xFFE5484D) : null,
                         borderRadius: BorderRadius.circular(22),
                         boxShadow: [
                           BoxShadow(
-                            color: (ai.isProcessing ? const Color(0xFFE5484D) : const Color(0xFF8B5CFF))
+                            color: (ai.isProcessing ? const Color(0xFFE5484D) : const Color(0xFF3A5CCC))
                                 .withValues(alpha: 0.25),
                             blurRadius: 10,
                             offset: const Offset(0, 3),
@@ -527,7 +527,7 @@ class _ChatBubble extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
+              colors: [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
             ),
             borderRadius: BorderRadius.only(
               topLeft: Radius.circular(18),
@@ -587,12 +587,12 @@ class _EmptyChat extends StatelessWidget {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF), Color(0xFFFF5C7B)],
+                colors: [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
               ),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF8B5CFF).withValues(alpha: 0.3),
+                  color: const Color(0xFF3A5CCC).withValues(alpha: 0.3),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),

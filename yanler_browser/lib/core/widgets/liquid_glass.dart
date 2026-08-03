@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/settings_provider.dart';
 
-/// LiquidGlass — 液态玻璃表面组件 (v2.0)
+/// LiquidGlass — 液态玻璃表面组件 (v2.1)
 ///
 /// 设计目标：完全透明、高级感的 Apple Liquid Glass 风格
 /// 核心特点：
 ///   1. 极低的底色不透明度 — 让背景完全透出来
 ///   2. 强烈的 BackdropFilter 模糊 — 玻璃核心
 ///   3. 柔和的顶部高光 — 仿真玻璃反射
-///   4. 极细的渐变发丝边框 — 界限感
+///   4. 单色细边框（2026-08 改版：去掉渐变发丝描边，收敛为可见细边）
 ///   5. 无噪点、无超假纹理 — 干净纯粹
 ///
 /// 参考：rdev/liquid-glass-react 的 Apple Liquid Glass 风格
@@ -52,7 +52,7 @@ class LiquidGlass extends StatelessWidget {
     this.opacity = 0.12,      // 默认极低不透明度，更透
     this.specular = true,
     this.border = true,
-    this.borderWidth = 0.8,   // 更细的边框
+    this.borderWidth = 1.0,   // 可见细边（2026-08：0.8 → 1.0）
     this.shadows,
     this.tint,
     this.elevation = true,
@@ -128,14 +128,16 @@ class LiquidGlass extends StatelessWidget {
               ),
             ),
           ),
-          // 5. 极细渐变发丝边框
+          // 5. 单色细边框
           if (border)
             Positioned.fill(
               child: CustomPaint(
                 painter: _GlassBorderPainter(
                   radius: radius,
                   width: borderWidth,
-                  isDark: isDark,
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.black.withValues(alpha: 0.08),
                 ),
               ),
             ),
@@ -159,16 +161,16 @@ class LiquidGlass extends StatelessWidget {
   }
 }
 
-/// 极细渐变发丝边框 — 玻璃边缘反光
+/// 极细单色边框 — 可见细边（深浅模式不发白）
 class _GlassBorderPainter extends CustomPainter {
   final BorderRadius radius;
   final double width;
-  final bool isDark;
+  final Color color;
 
   _GlassBorderPainter({
     required this.radius,
     required this.width,
-    required this.isDark,
+    required this.color,
   });
 
   @override
@@ -183,33 +185,15 @@ class _GlassBorderPainter extends CustomPainter {
 
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = width;
+      ..strokeWidth = width
+      ..color = color;
 
-    // 顶亮底暗的渐变边框
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: isDark
-          ? [
-              Colors.white.withValues(alpha: 0.25),
-              Colors.white.withValues(alpha: 0.05),
-              Colors.white.withValues(alpha: 0.02),
-            ]
-          : [
-              Colors.white.withValues(alpha: 0.6),
-              Colors.white.withValues(alpha: 0.15),
-              Colors.black.withValues(alpha: 0.05),
-            ],
-      stops: const [0.0, 0.5, 1.0],
-    ).createShader(strokeRect);
-
-    paint.shader = gradient;
     canvas.drawRRect(strokeRRect, paint);
   }
 
   @override
   bool shouldRepaint(_GlassBorderPainter oldDelegate) =>
-      oldDelegate.isDark != isDark ||
+      oldDelegate.color != color ||
       oldDelegate.radius != radius ||
       oldDelegate.width != width;
 }

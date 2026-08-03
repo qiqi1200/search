@@ -8,9 +8,9 @@ import 'package:flutter/material.dart';
 ///   3. 轻阴影提升层次（可选关掉，保持列表干净）
 ///   4. 可选品牌 tint — 激活态用品牌色描边 + 微染底
 ///
-/// 配色（保留品牌 #5B7FFF / #7B9FFF，微调层次）：
-///   浅色：页面底 #F7F5F2 / 卡片 #FFFFFF / 边框 #E4E4E7
-///   深色：页面底 #191A1E / 卡片 #232328 / 边框 #3B3C42
+/// 配色（品牌 #3A5CCC / #7B93F2，微调层次）：
+///   浅色：页面底 #F6F4EF / 卡片 #FFFFFF / 边框 #E3E0D9
+///   深色：页面底 #131417 / 卡片 #1C1E22 / 边框 #2E3035
 class YanlerSurface extends StatelessWidget {
   final Widget child;
 
@@ -60,10 +60,10 @@ class YanlerSurface extends StatelessWidget {
     final radius = borderRadius ?? BorderRadius.circular(16);
 
     // 实色卡片底色
-    final Color baseFill = isDark ? const Color(0xFF232328) : Colors.white;
+    final Color baseFill = isDark ? const Color(0xFF1C1E22) : Colors.white;
     // 默认 1px 可见边框
     final Color baseBorder =
-        isDark ? const Color(0xFF3B3C42) : const Color(0xFFE4E4E7);
+        isDark ? const Color(0xFF2E3035) : const Color(0xFFE3E0D9);
 
     final Color borderColor = tint ?? baseBorder;
     // tint 时品牌色微染底（激活态层次），不改变卡片主体色相

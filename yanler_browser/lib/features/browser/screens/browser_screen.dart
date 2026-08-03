@@ -693,15 +693,8 @@ class _MenuButtonState extends State<_MenuButton> {
                 curve: Curves.easeOutCubic,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  gradient: active
-                      ? const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-                        )
-                      : null,
                   color: active
-                      ? null
+                      ? theme.colorScheme.primary
                       : theme.colorScheme.surfaceContainerHigh
                           .withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(16),
@@ -713,7 +706,7 @@ class _MenuButtonState extends State<_MenuButton> {
                   boxShadow: active
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF8B5CFF).withValues(alpha: 0.28),
+                            color: theme.colorScheme.primary.withValues(alpha: 0.28),
                             blurRadius: 10,
                             offset: const Offset(0, 3),
                           ),

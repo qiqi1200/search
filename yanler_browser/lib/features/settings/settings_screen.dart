@@ -516,20 +516,21 @@ class _QuickLinksSection extends StatelessWidget {
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-                      ),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Theme.of(context).colorScheme.surfaceContainerLow
+                          : Colors.white,
                       borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
                     ),
                     child: Center(
                       child: Text(
                         link.title.characters.first.toUpperCase(),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                         ),
                       ),
                     ),

@@ -9,14 +9,14 @@ import 'package:flutter/material.dart';
 class YanlerMotion {
   YanlerMotion._();
 
-  /// 微交互时长（按压反馈等）
-  static const Duration quick = Duration(milliseconds: 150);
+  /// 微交互时长（按压反馈等，120ms）
+  static const Duration quick = Duration(milliseconds: 120);
 
   /// 标准时长（列表入场）
   static const Duration base = Duration(milliseconds: 250);
 
-  /// 柔和时长（页面过渡）
-  static const Duration soft = Duration(milliseconds: 300);
+  /// 柔和时长（页面过渡 400ms）
+  static const Duration soft = Duration(milliseconds: 400);
 
   /// 列表交错入场：相邻两项间隔
   static const Duration staggerInterval = Duration(milliseconds: 40);
@@ -33,15 +33,22 @@ class YanlerMotion {
   /// 退出：easeIn
   static const Curve exit = Curves.easeIn;
 
+  /// 抽屉/底部面板上滑曲线 cubic-bezier(0.32, 0.72, 0, 1)
+  static const Curve drawer = Cubic(0.32, 0.72, 0, 1);
+
+  /// 弹性点缀曲线 cubic-bezier(0.34, 1.56, 0.64, 1)——仅用于开关拨珠、小红点
+  static const Curve elastic = Cubic(0.34, 1.56, 0.64, 1);
+
   /// 是否尊重系统「减弱动效」
   static bool reduceMotion(BuildContext context) =>
       MediaQuery.disableAnimationsOf(context);
 }
 
-/// 页面过渡：淡入 + 轻微上移(1.5%) + 微缩放(0.985→1)
+/// 页面过渡：方向感推入 — 新页自右侧 8% 滑入 + 淡入，旧页轻微左移并变暗
 ///
-/// 时长由 MaterialPageRoute 提供（300ms），曲线 cubic-bezier(0.22,1,0.36,1)，
+/// 时长 400ms（MaterialPageRoute 提供），进入曲线 cubic-bezier(0.16,1,0.3,1)，
 /// 退出反向 easeIn。只动 transform/opacity（GPU 合成层，不掉帧）。
+/// 与 preview/index.html 的「方向转场」保持一致。
 class YanlerPageTransitionsBuilder extends PageTransitionsBuilder {
   const YanlerPageTransitionsBuilder();
 
@@ -61,18 +68,33 @@ class YanlerPageTransitionsBuilder extends PageTransitionsBuilder {
       curve: YanlerMotion.enter,
       reverseCurve: YanlerMotion.exit,
     );
+    final secondary = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: YanlerMotion.enter,
+      reverseCurve: YanlerMotion.exit,
+    );
 
-    return FadeTransition(
-      opacity: curved,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.015),
-          end: Offset.zero,
-        ).animate(curved),
-        child: ScaleTransition(
-          scale: Tween<double>(begin: 0.985, end: 1.0).animate(curved),
-          child: child,
-        ),
+    // 新页：右 8% → 0，透明度 0.4 → 1
+    final incoming = SlideTransition(
+      position: Tween<Offset>(
+        begin: const Offset(0.08, 0),
+        end: Offset.zero,
+      ).animate(curved),
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.4, end: 1.0).animate(curved),
+        child: child,
+      ),
+    );
+
+    // 旧页：被推向左侧 3% 并变暗（secondaryAnimation 0→1 时）
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: Offset.zero,
+        end: const Offset(-0.03, 0),
+      ).animate(secondary),
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 1.0, end: 0.55).animate(secondary),
+        child: incoming,
       ),
     );
   }

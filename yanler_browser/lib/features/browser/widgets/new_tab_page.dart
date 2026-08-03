@@ -212,7 +212,7 @@ class _NewTabPageState extends State<NewTabPage>
           colors: useDefaultBg
               ? [
                   theme.colorScheme.surface,
-                  isDark ? const Color(0xFF1D1E24) : const Color(0xFFF0EDE9),
+                  isDark ? const Color(0xFF191B1F) : const Color(0xFFECE9E2),
                 ]
               : wallpaper.colorsFor(theme.brightness),
         ),
@@ -354,56 +354,58 @@ class _NewTabPageState extends State<NewTabPage>
   }
 }
 
-/// Yanler 文字 Logo — 现代无衬线体，简洁品牌标识
+/// Yanler 文字 Logo — 思源宋体，纯墨色（2026-08 改版）
 ///
 /// 设计要点：
-/// - 统一 Outfit 字体，保持一致性
-/// - Y 与 anler 大小协调，比例更自然
-/// - 柔和的渐变色，不刺眼
+/// - 去掉渐变文字，收敛为 onSurface 墨色 + 1px 发丝分隔线
+/// - 与预览 preview/index.html 保持一致（Y 48 / anler 32）
 class _YanlerText extends StatelessWidget {
   const _YanlerText();
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final ink = theme.colorScheme.onSurface;
 
-    return ShaderMask(
-      shaderCallback: (bounds) => LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          isDark ? const Color(0xFF8BA4FF) : const Color(0xFF6B8CFF),
-          isDark ? const Color(0xFFB88AFF) : const Color(0xFF9B6BFF),
-        ],
-      ).createShader(bounds),
-      child: RichText(
-        text: const TextSpan(
-          children: [
-            TextSpan(
-              text: 'Y',
-              style: TextStyle(
-                fontSize: 48,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -1,
-                color: Colors.white,
-                fontFamily: 'Outfit',
-                height: 1.0,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        RichText(
+          text: TextSpan(
+            children: [
+              TextSpan(
+                text: 'Y',
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: -2,
+                  color: ink,
+                  fontFamily: 'SourceHanSerifSC',
+                  height: 1.0,
+                ),
               ),
-            ),
-            TextSpan(
-              text: 'anler',
-              style: TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 1,
-                color: Colors.white,
-                fontFamily: 'Outfit',
-                height: 1.0,
+              TextSpan(
+                text: 'anler',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 3,
+                  color: ink,
+                  fontFamily: 'SourceHanSerifSC',
+                  height: 1.0,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        // 发丝分隔线
+        Container(
+          width: 44,
+          height: 1,
+          margin: const EdgeInsets.only(top: 12),
+          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+        ),
+      ],
     );
   }
 }
@@ -429,8 +431,20 @@ class _PoemDisplay extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          displayed + (typing ? '▊' : ''),
+        // 打字光标：2px 竖线呼吸（替代硬闪烁 ▊），逻辑节奏不变
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: displayed),
+              if (typing)
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.middle,
+                  child: _BreathingCursor(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 17,
@@ -455,6 +469,55 @@ class _PoemDisplay extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// 打字光标 — 2px 竖线呼吸动画（0.9 ↔ 0.15 透明度，1.1s 往复）
+class _BreathingCursor extends StatefulWidget {
+  final Color color;
+  const _BreathingCursor({required this.color});
+
+  @override
+  State<_BreathingCursor> createState() => _BreathingCursorState();
+}
+
+class _BreathingCursorState extends State<_BreathingCursor>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _controller.value = 1; // 减弱动效：常亮
+    } else {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.9, end: 0.15).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      ),
+      child: Container(
+        width: 2,
+        height: 17,
+        margin: const EdgeInsets.only(left: 3),
+        color: widget.color,
+      ),
     );
   }
 }
@@ -588,14 +651,7 @@ class _SearchInputState extends State<_SearchInput> {
                   Container(
                     margin: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Color(0xFF5B7FFF),
-                          Color(0xFF8B5CFF),
-                        ],
-                      ),
+                      color: theme.colorScheme.primary,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: IconButton(
@@ -805,9 +861,7 @@ class _AgentRunPanelState extends State<_AgentRunPanel> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-                      ),
+                      color: theme.colorScheme.primary,
                       borderRadius: BorderRadius.circular(7),
                     ),
                     child: const Text(
@@ -940,7 +994,7 @@ class _AgentRunPanelState extends State<_AgentRunPanel> {
                           const SizedBox(width: 8),
                           FilledButton(
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF5B7FFF),
+                              backgroundColor: theme.colorScheme.primary,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
@@ -965,20 +1019,6 @@ class _AgentRunPanelState extends State<_AgentRunPanel> {
 /// 快捷链接区 — Speed Dial（Vivaldi / Chrome 同款）
 class _QuickLinksSection extends StatelessWidget {
   const _QuickLinksSection();
-
-  static const List<List<Color>> _palette = [
-    [Color(0xFF5B7FFF), Color(0xFF8B5CFF)],
-    [Color(0xFF00B8A9), Color(0xFF00A3E0)],
-    [Color(0xFFFF8E53), Color(0xFFFF5C7B)],
-    [Color(0xFF7B61FF), Color(0xFFB05CFF)],
-    [Color(0xFF2E9EFF), Color(0xFF00C6A7)],
-    [Color(0xFFF95C7B), Color(0xFFF7A35C)],
-  ];
-
-  static List<Color> _colorsFor(String url) {
-    final hash = url.codeUnits.fold<int>(17, (a, b) => (a * 31 + b) & 0xFFFF);
-    return _palette[hash % _palette.length];
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -1010,11 +1050,10 @@ class _QuickLinksSection extends StatelessWidget {
           alignment: WrapAlignment.center,
           children: [
             ...quickLinks.links.map((link) {
-              final colors = _colorsFor(link.url);
               return _QuickLinkTile(
                 width: tileWidth,
                 title: link.title,
-                colors: colors,
+                url: link.url,
                 onTap: () {
                   if (link.url.isNotEmpty) {
                     browser.addTab(url: link.url);
@@ -1060,14 +1099,14 @@ class _QuickLinksSection extends StatelessWidget {
 class _QuickLinkTile extends StatelessWidget {
   final double width;
   final String title;
-  final List<Color> colors;
+  final String url;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   const _QuickLinkTile({
     required this.width,
     required this.title,
-    required this.colors,
+    required this.url,
     required this.onTap,
     required this.onLongPress,
   });
@@ -1084,32 +1123,29 @@ class _QuickLinkTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // 字母头像 — 渐变圆
+            // 字母头像 — 纸面风格（2026-08：去渐变，纸底 + 边框 + 墨色字母）
             Container(
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: colors,
-                ),
+                color: theme.brightness == Brightness.dark
+                    ? theme.colorScheme.surfaceContainerLow
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: colors[1].withValues(alpha: 0.28),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+                border: Border.all(color: theme.colorScheme.outlineVariant),
               ),
               child: Center(
                 child: Text(
-                  title.characters.first.toUpperCase(),
-                  style: const TextStyle(
+                  (url.isNotEmpty
+                          ? (Uri.tryParse(url)?.host ?? title)
+                          : title)
+                      .characters
+                      .first
+                      .toUpperCase(),
+                  style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white,
+                    color: theme.colorScheme.onSurface,
                     fontFamily: 'Outfit',
                   ),
                 ),
