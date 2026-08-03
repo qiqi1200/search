@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../core/widgets/liquid_glass.dart';
+import '../../core/theme/yanler_motion.dart';
 import '../../core/widgets/site_avatar.dart';
+import '../../core/widgets/yanler_surface.dart';
 import '../history/history_service.dart';
 
 /// 历史记录页 — 支持搜索，点击返回所选 URL
@@ -26,7 +27,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final history = context.watch<HistoryService>();
 
     final entries = _query.isEmpty ? history.history : history.search(_query);
@@ -59,10 +59,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
           if (history.count > 0)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-              child: LiquidGlass(
+              // 实色搜索框
+              child: YanlerSurface(
                 borderRadius: BorderRadius.circular(18),
-                blur: 20,
-                opacity: isDark ? 0.32 : 0.36,
+                elevated: false,
                 child: SizedBox(
                   height: 40,
                   child: Row(
@@ -127,12 +127,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final e = entries[index];
-                      return _HistoryCard(
-                        title: e.title,
-                        url: e.url,
-                        visitedAt: e.visitedAt,
-                        onTap: () => Navigator.pop(context, e.url),
-                        onDelete: () => history.remove(e.id),
+                      // 交错入场 + 按压反馈
+                      return StaggerItem(
+                        index: index,
+                        child: Pressable(
+                          child: _HistoryCard(
+                            title: e.title,
+                            url: e.url,
+                            visitedAt: e.visitedAt,
+                            onTap: () => Navigator.pop(context, e.url),
+                            onDelete: () => history.remove(e.id),
+                          ),
+                        ),
                       );
                     },
                   ),
@@ -193,14 +199,12 @@ class _HistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return LiquidGlass(
+    // 实色历史卡片
+    return YanlerSurface(
       borderRadius: BorderRadius.circular(16),
-      blur: 18,
-      opacity: isDark ? 0.3 : 0.36,
-      borderWidth: 0.9,
+      elevated: false,
       child: ListTile(
         onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),

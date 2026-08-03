@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/wallpapers.dart';
 import '../../../core/utils/poem_database.dart';
-import '../../../core/widgets/liquid_glass.dart';
+import '../../../core/widgets/liquid_glass.dart'; // GlassTokens（建议下拉阴影）仍在使用
+import '../../../core/widgets/yanler_surface.dart';
 import '../../../providers/ai_provider.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/quick_links_provider.dart';
@@ -526,17 +527,16 @@ class _SearchInputState extends State<_SearchInput> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
+    // 建议下拉仍在同一 build 中使用 isDark
+    final isDark = theme.brightness == Brightness.dark;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        LiquidGlass(
+        // 实色搜索框
+        YanlerSurface(
           borderRadius: BorderRadius.circular(26),
-          blur: 22,
-          opacity: isDark ? 0.4 : 0.38,
-          shadows: GlassTokens.softShadow(isDark),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: SizedBox(
@@ -785,14 +785,10 @@ class _AgentRunPanelState extends State<_AgentRunPanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    return LiquidGlass(
+    // 实色 Agent 执行卡片
+    return YanlerSurface(
       borderRadius: BorderRadius.circular(20),
-      blur: 24,
-      opacity: isDark ? 0.5 : 0.55,
-      borderWidth: 1,
-      shadows: GlassTokens.softShadow(isDark),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
         child: Padding(

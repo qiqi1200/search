@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'yanler_motion.dart';
 
 class AppTheme {
   // 品牌主色调 — 淡紫蓝（Yanler 渐变 Logo 的同源色）
@@ -99,9 +100,9 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.android: YanlerPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.windows: YanlerPageTransitionsBuilder(),
       },
     ),
   );
@@ -191,9 +192,9 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.android: YanlerPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+        TargetPlatform.windows: YanlerPageTransitionsBuilder(),
       },
     ),
   );

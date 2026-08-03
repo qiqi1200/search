@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/widgets/liquid_glass.dart';
+import '../../../core/theme/yanler_motion.dart';
 import '../../../core/widgets/site_avatar.dart';
+import '../../../core/widgets/yanler_surface.dart';
 import '../../../providers/browser_provider.dart';
 
 class TabSwitcherSheet extends StatelessWidget {
@@ -10,14 +11,12 @@ class TabSwitcherSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final height = MediaQuery.of(context).size.height * 0.55;
 
-    return LiquidGlass(
+    // 实色标签切换面板
+    return YanlerSurface(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      blur: 30,
-      opacity: isDark ? 0.4 : 0.36,
-      borderWidth: 1,
+      elevated: false,
       child: SafeArea(
         top: false,
         child: SizedBox(
@@ -114,16 +113,22 @@ class TabSwitcherSheet extends StatelessWidget {
                           itemBuilder: (context, index) {
                             final tab = browser.tabs[index];
                             final isActive = index == browser.activeTabIndex;
-                            return _TabCard(
-                              tab: tab,
-                              isActive: isActive,
-                              onTap: () {
-                                browser.switchTab(index);
-                                Navigator.pop(context);
-                              },
-                              onClose: () {
-                                browser.closeTab(index);
-                              },
+                            // 交错入场 + 按压反馈
+                            return StaggerItem(
+                              index: index,
+                              child: Pressable(
+                                child: _TabCard(
+                                  tab: tab,
+                                  isActive: isActive,
+                                  onTap: () {
+                                    browser.switchTab(index);
+                                    Navigator.pop(context);
+                                  },
+                                  onClose: () {
+                                    browser.closeTab(index);
+                                  },
+                                ),
+                              ),
                             );
                           },
                         ),
@@ -162,11 +167,10 @@ class _TabCard extends StatelessWidget {
         duration: const Duration(milliseconds: 160),
         scale: isActive ? 1.0 : 0.985,
         curve: Curves.easeOutCubic,
-        child: LiquidGlass(
+        child: YanlerSurface(
           borderRadius: BorderRadius.circular(18),
-          blur: 14,
-          opacity: isActive ? 0.45 : 0.35,
-          borderWidth: isActive ? 1.4 : 0.9,
+          elevated: false,
+          // 选中 = 品牌色描边
           tint: isActive ? theme.colorScheme.primary : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

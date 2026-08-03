@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/widgets/liquid_glass.dart';
+import '../../core/theme/yanler_motion.dart';
 import '../../core/widgets/site_avatar.dart';
+import '../../core/widgets/yanler_surface.dart';
 import '../bookmarks/bookmark_service.dart';
 
 /// 书签管理页 — 点击返回所选 URL，由 BrowserScreen 打开
@@ -43,11 +44,17 @@ class BookmarksScreen extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final b = bookmarks.bookmarks[index];
-                return _BookmarkCard(
-                  title: b.title,
-                  url: b.url,
-                  onTap: () => Navigator.pop(context, b.url),
-                  onDelete: () => bookmarks.remove(b.id),
+                // 交错入场 + 按压反馈
+                return StaggerItem(
+                  index: index,
+                  child: Pressable(
+                    child: _BookmarkCard(
+                      title: b.title,
+                      url: b.url,
+                      onTap: () => Navigator.pop(context, b.url),
+                      onDelete: () => bookmarks.remove(b.id),
+                    ),
+                  ),
                 );
               },
             ),
@@ -93,14 +100,12 @@ class _BookmarkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return LiquidGlass(
+    // 实色书签卡片
+    return YanlerSurface(
       borderRadius: BorderRadius.circular(18),
-      blur: 18,
-      opacity: isDark ? 0.3 : 0.36,
-      borderWidth: 1,
+      elevated: false,
       child: ListTile(
         onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),

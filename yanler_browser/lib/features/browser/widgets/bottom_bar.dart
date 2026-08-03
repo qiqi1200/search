@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/widgets/liquid_glass.dart';
+import '../../../core/widgets/yanler_surface.dart';
 
 /// 底部导航栏 — 标准浏览器布局，AI 居中
 ///
@@ -39,12 +39,10 @@ class BottomBar extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return LiquidGlass(
-      // 顶部圆角，与全局玻璃风格统一
+    // 实色底栏：顶部圆角 + 1px 顶边
+    return YanlerSurface(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-      blur: 28,
-      opacity: isDark ? 0.34 : 0.36,
-      borderWidth: 0.8,
+      elevated: false,
       child: Padding(
         padding: EdgeInsets.only(
           left: 4,

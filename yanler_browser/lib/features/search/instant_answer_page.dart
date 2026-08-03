@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../core/widgets/liquid_glass.dart';
+import '../../core/widgets/yanler_surface.dart';
 import 'instant_answer.dart';
 
 /// 本地即时答案页 — 计算 / 时间 / 农历 / 诗词。
@@ -23,7 +23,6 @@ class InstantAnswerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     final (icon, color) = switch (answer.kind) {
       InstantAnswerKind.calculator => (Icons.calculate_rounded, const Color(0xFF5B7FFF)),
@@ -37,11 +36,10 @@ class InstantAnswerPage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // 顶部：返回 + 查询 + Yanler 标签
-            LiquidGlass(
+            // 顶部：返回 + 查询 + Yanler 标签（实色）
+            YanlerSurface(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(0)),
-              blur: 24,
-              opacity: isDark ? 0.32 : 0.34,
+              elevated: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
                 child: Row(

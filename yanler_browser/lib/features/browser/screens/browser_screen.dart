@@ -22,7 +22,7 @@ import '../widgets/bottom_bar.dart';
 import '../widgets/tab_switcher.dart';
 import '../widgets/new_tab_page.dart';
 import '../widgets/webview_container.dart';
-import '../../../core/widgets/liquid_glass.dart';
+import '../../../core/widgets/yanler_surface.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -507,11 +507,10 @@ class _BottomMenuSheet extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return LiquidGlass(
+    // 实色菜单面板
+    return YanlerSurface(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      blur: 30,
-      opacity: isDark ? 0.42 : 0.38,
-      borderWidth: 1,
+      elevated: false,
       child: SafeArea(
         top: false,
         child: Padding(

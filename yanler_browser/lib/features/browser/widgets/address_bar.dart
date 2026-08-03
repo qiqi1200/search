@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../../core/widgets/liquid_glass.dart';
+import '../../../core/widgets/liquid_glass.dart'; // GlassTokens（建议下拉阴影）仍在使用
+import '../../../core/widgets/yanler_surface.dart';
 import '../../search/search_suggestions.dart';
 
 class AddressBar extends StatefulWidget {
@@ -128,11 +129,10 @@ class _AddressBarState extends State<AddressBar> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: LiquidGlass(
+      child: YanlerSurface(
         borderRadius: BorderRadius.circular(24),
-        blur: 24,
-        opacity: isDark ? 0.32 : 0.34,
-        shadows: GlassTokens.softShadow(isDark),
+        // 聚焦时品牌色描边动画（AnimatedContainer 平滑过渡）
+        tint: _isEditing ? theme.colorScheme.primary : null,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

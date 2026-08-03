@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/widgets/liquid_glass.dart';
+import '../../core/widgets/yanler_surface.dart';
 import '../../providers/ai_provider.dart';
 import '../../providers/browser_provider.dart';
 import '../../providers/settings_provider.dart';
@@ -341,10 +341,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: LiquidGlass(
+                    // 实色 AI 输入框
+                    child: YanlerSurface(
                       borderRadius: BorderRadius.circular(24),
-                      blur: 22,
-                      opacity: isDark ? 0.3 : 0.36,
+                      elevated: false,
                       child: TextField(
                         controller: _inputController,
                         focusNode: _inputFocusNode,
@@ -412,10 +412,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => LiquidGlass(
+      // 实色会话历史弹层
+      builder: (sheetContext) => YanlerSurface(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        blur: 28,
-        opacity: Theme.of(context).brightness == Brightness.dark ? 0.5 : 0.45,
+        elevated: false,
         child: SafeArea(
           top: false,
           child: SizedBox(
@@ -468,10 +468,10 @@ class _AIChatScreenState extends State<AIChatScreen> {
                           itemBuilder: (context, index) {
                             final s = ai.sessions[index];
                             final isActive = ai.activeSession?.id == s.id;
-                            return LiquidGlass(
+                            // 实色会话项（选中 = 品牌色描边）
+                            return YanlerSurface(
                               borderRadius: BorderRadius.circular(14),
-                              blur: 12,
-                              opacity: isActive ? 0.6 : 0.4,
+                              elevated: false,
                               tint: isActive ? Theme.of(context).colorScheme.primary : null,
                               child: ListTile(
                                 dense: true,

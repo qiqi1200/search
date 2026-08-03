@@ -11,7 +11,7 @@ import '../../providers/ai_provider.dart';
 import '../../providers/quick_links_provider.dart';
 import '../../core/constants/search_engines.dart';
 import '../../core/constants/wallpapers.dart';
-import '../../core/widgets/liquid_glass.dart';
+import '../../core/widgets/yanler_surface.dart';
 import '../ai/ai_config_sheet.dart';
 import '../bookmarks/bookmark_service.dart';
 import '../bookmarks/bookmarks_screen.dart';
@@ -111,14 +111,13 @@ class _SearchSection extends StatelessWidget {
   }
 
   void _showEnginePicker(BuildContext context, SettingsProvider settings) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => LiquidGlass(
+      // 实色底部弹层
+      builder: (sheetContext) => YanlerSurface(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        blur: 28,
-        opacity: isDark ? 0.5 : 0.45,
+        elevated: false,
         child: SafeArea(
           top: false,
           child: Padding(
@@ -300,10 +299,10 @@ class _AppearanceSection extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => LiquidGlass(
+      // 实色底部弹层
+      builder: (sheetContext) => YanlerSurface(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        blur: 28,
-        opacity: isDark ? 0.5 : 0.45,
+        elevated: false,
         child: SafeArea(
           top: false,
           child: Padding(
@@ -690,15 +689,11 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final theme = Theme.of(context);
 
-    return LiquidGlass(
+    // 实色设置分组卡片
+    return YanlerSurface(
       borderRadius: BorderRadius.circular(20),
-      blur: 18,
-      opacity: isDark ? 0.45 : 0.5,
-      borderWidth: 1,
-      shadows: GlassTokens.softShadow(isDark),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
