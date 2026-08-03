@@ -1,7 +1,7 @@
 {
-  "version": "1.5.0",
+  "version": "1.5.1",
   "build": 1,
-  "url": "https://github.com/qiqi1200/search/releases/download/v1.5.0/Yanler-1.5.0.apk",
-  "sha256": "61a7ebea1cedf5e35ca359f23f9341fe67f1bbe789b33a4129bacfc67a291306",
-  "notes": "Yanler v1.5.0 自动发布"
+  "url": "https://github.com/qiqi1200/search/releases/download/v1.5.1/Yanler-1.5.1.apk",
+  "sha256": "0c860f11aac2b1e8515639ba66a5c938422ca70dd3959f5196611668d4e372a1",
+  "notes": "Yanler v1.5.1 自动发布"
 }
