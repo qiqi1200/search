@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,22 @@ class AdblockEngine extends ChangeNotifier {
   static const Set<String> _adPathSuffixKeywords = {
     'tracking', 'analytics', 'telemetry', 'ads', 'popup',
   };
+
+  // ==================== 受保护域名（正常内容 CDN，绝不拦截） ====================
+  // 百度缩略图 / 凤凰正文图片分别来自这些域名及其子域。
+  // 即使 EasyList 拉取的规则列表中出现也强制放行——本名单在一切拦截判定之前检查。
+  static const Set<String> _protectedHosts = {
+    'baidu.com',
+    'bdimg.com',
+    'bdstatic.com',
+    'baidupcs.com',
+    'ifeng.com',
+    'ifengimg.com',
+  };
+
+  /// 调试日志开关：开启后在 logcat（tag=AdBlock）打印每一条被拦截/受保护的 URL，
+  /// 便于排查误杀。默认关闭。
+  static bool debugLog = false;
 
   bool _isInitialized = false;
   bool _isEnabled = true;
@@ -415,7 +432,11 @@ class AdblockEngine extends ChangeNotifier {
   // ==================== 拦截判定 ====================
 
   /// 判断是否拦截该请求。主框架请求已由调用方放行，这里只处理子资源。
-  bool shouldBlock(String url, String? resourceType) {
+  ///
+  /// [acceptHeader] 为请求头 Accept（WebView 子资源请求传入），用于识别图片请求：
+  /// 图片走「域名黑名单 + 受保护域名」判定，跳过 URL 子串/路径关键词规则，
+  /// 避免把正常正文图片（凤凰/百度缩略图）当广告误杀。
+  bool shouldBlock(String url, String? resourceType, {String acceptHeader = ''}) {
     if (!_isInitialized || !_isEnabled) return false;
 
     // 关键资源（CSS/字体）一律放行，避免页面样式丢失
@@ -430,26 +451,76 @@ class AdblockEngine extends ChangeNotifier {
       if (urlLower.contains(p)) return false;
     }
 
-    // 域名拦截（Set 匹配，O(1) 主机 + 父域名）
+    // 受保护域名：正常内容 CDN（百度/凤凰），即使 EasyList 规则命中也绝不拦截
+    if (_isProtectedHost(host)) {
+      _debugLog('ALLOW(protected) $url');
+      return false;
+    }
+
+    // 域名拦截（Set 匹配，O(1) 主机 + 父域名）——图片同样适用
+    //（pos.baidu.com / doubleclick.net 等广告域的图片也拦）
     if (_matchesHost(host, _domainBlock)) {
+      _debugLog('BLOCK(domain) $url');
       _incrementBlock(url);
       return true;
     }
 
+    // 图片资源豁免：Accept 含 image/* 或 URL 以图片后缀结尾，且 host 不在
+    // 黑名单域名中 → 一律放行（不进入 URL 子串 / 路径关键词判定）
+    final isImage = acceptHeader.toLowerCase().contains('image/') ||
+        _isImageUrl(urlLower);
+    if (isImage) return false;
+
     // 少量精确 URL 子串
     for (final p in _urlBlock) {
       if (urlLower.contains(p)) {
+        _debugLog('BLOCK(url) $url');
         _incrementBlock(url);
         return true;
       }
     }
 
-    // 路径段 / 文件后缀精准匹配（广告/弹窗/追踪/统计）
+    // 路径段 / 文件后缀精准匹配（广告/弹窗/追踪/统计，仅非图片资源）
     if (_matchesAdPath(urlLower)) {
+      _debugLog('BLOCK(path) $url');
       _incrementBlock(url);
       return true;
     }
     return false;
+  }
+
+  /// 是否为图片资源 URL（按文件后缀判断，含带查询参数的情况）。
+  bool _isImageUrl(String urlLower) {
+    for (final ext in _imageExtensions) {
+      if (urlLower.endsWith(ext)) return true;
+      if (urlLower.contains('$ext?')) return true;
+      if (urlLower.contains('$ext&')) return true;
+    }
+    return false;
+  }
+
+  /// 图片文件后缀（与用户要求一致：jpg/jpeg/png/gif/webp/heic/avif + bmp）
+  static const Set<String> _imageExtensions = {
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.avif', '.bmp',
+  };
+
+  /// 主机是否属于受保护域名（含子域/父域）。
+  bool _isProtectedHost(String host) {
+    if (host.isEmpty || _protectedHosts.isEmpty) return false;
+    if (_protectedHosts.contains(host)) return true;
+    var dot = host.indexOf('.');
+    while (dot >= 0 && dot < host.length - 1) {
+      final parent = host.substring(dot + 1);
+      if (_protectedHosts.contains(parent)) return true;
+      dot = host.indexOf('.', dot + 1);
+    }
+    return false;
+  }
+
+  /// 调试日志（logcat tag = AdBlock）
+  void _debugLog(String msg) {
+    if (!debugLog) return;
+    developer.log(msg, name: 'AdBlock');
   }
 
   bool _isCriticalResource(String urlLower) {

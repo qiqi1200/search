@@ -365,7 +365,12 @@ class WebViewContainerState extends State<WebViewContainer>
           return null;
         }
         final url = request.url.toString();
-        if (adblock.shouldBlock(url, null)) {
+        // 传入 Accept 头：图片请求（image/*）走「域名黑名单」判定，
+        // 跳过路径关键词规则，避免误杀正文/缩略图（凤凰、百度）
+        final headers = request.headers ?? {};
+        final accept =
+            headers['Accept'] ?? headers['accept'] ?? headers['ACCEPT'] ?? '';
+        if (adblock.shouldBlock(url, null, acceptHeader: accept)) {
           // 返回空响应拦截广告
           return WebResourceResponse(
             contentType: 'text/plain',

@@ -17,7 +17,8 @@ class PopupBlockScript {
   window.__yanlerPopupBlocked = true;
   'use strict';
 
-  // 1. 移除 fixed/absolute 定位的高层浮层/遮罩广告
+  // 1. 移除 fixed/absolute 定位的高层遮罩广告（仅保留「覆盖视口 40%+ 的遮罩」判定，
+  //    不做按固定尺寸/小浮窗判定——避免误伤正文 fixed 小元素与正常图片）
   var removeFloating = function() {
     var all = document.querySelectorAll('*');
     for (var i = 0; i < all.length; i++) {
@@ -32,21 +33,17 @@ class PopupBlockScript {
         var area = rect.width * rect.height;
         var viewArea = window.innerWidth * window.innerHeight;
         // 覆盖面积超过视口 40% → 遮罩广告
-        if (area > viewArea * 0.4) { el.remove(); continue; }
-        // 小浮窗（下载/推广/客服）：宽 180~260px 且超高 z-index
-        if (rect.width >= 180 && rect.width <= 260 && zIndex > 99999) { el.remove(); }
+        if (area > viewArea * 0.4) { el.remove(); }
       }
     }
   };
 
-  // 2. 移除常见广告 class/id（带正文豁免）
+  // 2. 移除精确类名广告弹层（白名单，不用 [class*="x"] / [id*="x"] 属性包含
+  //    选择器——那会误命中 loading/header/sidebar 等正常元素，隐藏正文图片）
   var adSelectors = [
     '.popup', '.modal', '.overlay', '.mask', '.float-ad', '.floating',
     '.sidebar-ad', '.download-app', '.app-download', '.open-app',
     '.guide-download', '.read-more-mask',
-    '[class*="popup"]', '[class*="modal"]', '[class*="overlay"]',
-    '[class*="banner-ad"]', '[id*="popup"]', '[id*="modal"]',
-    '[id*="mask"]', '[id*="float"]', '[id*="advert"]',
     '.layui-layer', '.layer-mask', '.weui-mask', '.weui-dialog',
   ];
   adSelectors.forEach(function(sel) {
