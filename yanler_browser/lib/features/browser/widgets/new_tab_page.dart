@@ -28,7 +28,178 @@ class NewTabPage extends StatefulWidget {
 }
 
 class _NewTabPageState extends State<NewTabPage>
-    with SingleTickerProviderStateMixin {
+    with AutomaticKeepAliveClientMixin {
+  // 搜索框直达 Agent 模式状态
+  String? _agentQuery;
+  UniqueKey? _agentRunKey;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  // ===============================================================
+  // Build
+  // ===============================================================
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 要求
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final settings = context.watch<SettingsProvider>();
+    final wallpaper = Wallpapers.byId(settings.wallpaperId);
+    final useDefaultBg = settings.wallpaperId == Wallpapers.defaultId;
+    final hasCustomWallpaper = settings.hasCustomWallpaper &&
+        settings.customWallpaperPath.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: useDefaultBg
+              ? [
+                  theme.colorScheme.surface,
+                  isDark ? const Color(0xFF191B1F) : const Color(0xFFECE9E2),
+                ]
+              : wallpaper.colorsFor(theme.brightness),
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 背景叠加层（壁纸图 + 透明度遮罩）独立 RepaintBoundary：
+          // 内容层重建/重绘时背景层不被连带，路由过渡期间主 Canvas 避免全屏重绘。
+          if (hasCustomWallpaper)
+            RepaintBoundary(
+              child: Image.file(
+                File(settings.customWallpaperPath),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          if (hasCustomWallpaper)
+            RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      theme.colorScheme.surface
+                          .withValues(alpha: settings.wallpaperOpacity),
+                      theme.colorScheme.surface.withValues(
+                        alpha: (settings.wallpaperOpacity + 0.1)
+                            .clamp(0.0, 1.0),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          SafeArea(
+            child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 48),
+
+                // 交替区域：Yanler 文字 ↔ 诗词（交叉淡化）
+                // 独立 _PoemCarousel：打字机/淡化只在自身 State 内 setState，
+                // 首页背景、搜索框、快捷链接不再随每个字符重建；
+                // 路由被不透明页面覆盖时自动暂停、返回动画结束后恢复。
+                const _PoemCarousel(),
+
+                const SizedBox(height: 36),
+
+                // 搜索框 — 液态玻璃
+                _SearchInput(onSubmit: _onSearch),
+
+                // 搜索框直达 Agent 模式面板
+                if (_agentQuery != null) ...[
+                  const SizedBox(height: 16),
+                  _AgentRunPanel(
+                    key: _agentRunKey,
+                    query: _agentQuery!,
+                    onClose: () => setState(() => _agentQuery = null),
+                  ),
+                ],
+
+                const SizedBox(height: 40),
+
+                // 快捷链接 — Speed Dial
+                const _QuickLinksSection(),
+
+                const SizedBox(height: 56),
+              ],
+            ),
+          ),
+        ),
+      ),
+        ],
+      ),
+    );
+  }
+
+  void _onSearch(String query) {
+    // 搜索框直达 Agent 模式：Agent 模式下指令型输入直接触发 AI 执行，
+    // 无需跳转独立 AI 聊天页。
+    final ai = context.read<AIProvider>();
+    if (ai.agentMode && _isAgentCommand(query)) {
+      setState(() {
+        _agentRunKey = UniqueKey();
+        _agentQuery = query;
+      });
+      return;
+    }
+    // 常规搜索 / 网址：走统一导航
+    widget.onSearch(query);
+  }
+
+  /// 判定输入是否为 Agent 指令（而非普通搜索词/网址）
+  static bool _isAgentCommand(String input) {
+    final t = input.trim();
+    if (t.startsWith('/')) return true;
+    const triggers = [
+      '帮我',
+      '请帮我',
+      '打开',
+      '点一下',
+      '点击',
+      '输入',
+      '滚动',
+      '翻译',
+      '总结',
+      '介绍一下',
+      '查一下',
+      '搜一下',
+      '找到',
+      '找一下',
+    ];
+    return triggers.any((x) => t.contains(x));
+  }
+}
+
+/// 品牌 Logo ↔ 诗词交叉淡化 + 打字机动画 — 独立 StatefulWidget。
+///
+/// 性能隔离：打字机/淡化定时器只在自身 State 内 setState，
+/// 首页背景、搜索框、快捷链接不会随每个字符重建；外层 RepaintBoundary
+/// 把诗词层的重绘隔离到最小区域（修复「返回过渡期间文字+背景全屏重绘」掉帧）。
+///
+/// 路由覆盖暂停：被不透明路由（如设置页）覆盖时，Overlay 会关闭本子树
+/// 的 TickerMode，这里据此暂停定时器，避免后台持续 setState 导致的
+/// 「返回动画期间首页文字/背景不断重建」的滞留感；返回动画结束
+/// （TickerMode 恢复）后再继续，天然满足「刷新挂载在过渡结束之后」。
+class _PoemCarousel extends StatefulWidget {
+  const _PoemCarousel();
+
+  @override
+  State<_PoemCarousel> createState() => _PoemCarouselState();
+}
+
+class _PoemCarouselState extends State<_PoemCarousel>
+    with AutomaticKeepAliveClientMixin, SingleTickerProviderStateMixin {
   late AnimationController _crossFade;
 
   // 打字机状态（保持原逻辑不变）
@@ -40,15 +211,14 @@ class _NewTabPageState extends State<NewTabPage>
   // 生命周期安全
   bool _disposed = false;
 
+  // 路由覆盖感知：TickerMode 关闭（被不透明路由覆盖）时暂停定时器
+  bool _tickersEnabled = true;
+
   // 定时器 — 合并为单一驱动
   Timer? _phaseTimer;
   Timer? _typewriterTimer;
 
   final _random = Random();
-
-  // 搜索框直达 Agent 模式状态
-  String? _agentQuery;
-  UniqueKey? _agentRunKey;
 
   // 可配置时长（ms）
   static const int _logoDuration = 4000;
@@ -56,6 +226,9 @@ class _NewTabPageState extends State<NewTabPage>
   static const int _poemExtraDuration = 2000; // 打字完成后额外停留
   static const int _typewriterDelay = 350;
   static const int _typewriterInterval = 60;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -70,12 +243,52 @@ class _NewTabPageState extends State<NewTabPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // TickerMode 是「被覆盖路由」的实时开关：设置页推入瞬间 → false → 暂停；
+    // 返回动画结束（弹层移除）后才 → true → 继续，不会在过渡帧内重建。
+    final enabled = TickerMode.of(context);
+    if (enabled == _tickersEnabled) return;
+    _tickersEnabled = enabled;
+    if (enabled) {
+      _resumePhase();
+    } else {
+      _pauseTimers();
+    }
+  }
+
+  @override
   void dispose() {
     _disposed = true;
     _phaseTimer?.cancel();
     _typewriterTimer?.cancel();
     _crossFade.dispose();
     super.dispose();
+  }
+
+  // ===============================================================
+  // 路由可见性（覆盖暂停 / 恢复）
+  // ===============================================================
+
+  void _pauseTimers() {
+    _phaseTimer?.cancel();
+    _phaseTimer = null;
+    _typewriterTimer?.cancel();
+    _typewriterTimer = null;
+  }
+
+  void _resumePhase() {
+    if (_disposed) return;
+    if (_showingPoem) {
+      // 恢复打字机（若未完成）
+      if (_charIndex < _currentPoem.content.length &&
+          _typewriterTimer == null) {
+        _startTypewriter();
+      }
+      _schedulePoemPhase();
+    } else {
+      _scheduleLogoPhase();
+    }
   }
 
   // ===============================================================
@@ -161,6 +374,7 @@ class _NewTabPageState extends State<NewTabPage>
   void _startTypewriter() {
     if (_disposed || !_showingPoem) return;
 
+    _typewriterTimer?.cancel();
     _typewriterTimer = Timer.periodic(
       const Duration(milliseconds: _typewriterInterval),
       _onTypewriterTick,
@@ -190,167 +404,42 @@ class _NewTabPageState extends State<NewTabPage>
     }
   }
 
-  // ===============================================================
-  // Build
-  // ===============================================================
-
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final theme = Theme.of(context);
-    final settings = context.watch<SettingsProvider>();
-    final wallpaper = Wallpapers.byId(settings.wallpaperId);
-    final useDefaultBg = settings.wallpaperId == Wallpapers.defaultId;
-    final hasCustomWallpaper = settings.hasCustomWallpaper &&
-        settings.customWallpaperPath.isNotEmpty;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: useDefaultBg
-              ? [
-                  theme.colorScheme.surface,
-                  isDark ? const Color(0xFF191B1F) : const Color(0xFFECE9E2),
-                ]
-              : wallpaper.colorsFor(theme.brightness),
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (hasCustomWallpaper)
-            Image.file(
-              File(settings.customWallpaperPath),
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-            ),
-          if (hasCustomWallpaper)
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    theme.colorScheme.surface
-                        .withValues(alpha: settings.wallpaperOpacity),
-                    theme.colorScheme.surface.withValues(
-                      alpha: (settings.wallpaperOpacity + 0.1).clamp(0.0, 1.0),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          SafeArea(
-            child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    super.build(context); // AutomaticKeepAliveClientMixin 要求
+    return RepaintBoundary(
+      child: SizedBox(
+        height: 100,
+        child: AnimatedBuilder(
+          animation: _crossFade,
+          builder: (context, child) {
+            final t = _crossFade.value;
+            return Stack(
+              alignment: Alignment.center,
               children: [
-                const SizedBox(height: 48),
-
-                // 交替区域：Yanler 文字 ↔ 诗词（交叉淡化）
-                SizedBox(
-                  height: 100,
-                  child: AnimatedBuilder(
-                    animation: _crossFade,
-                    builder: (context, child) {
-                      final t = _crossFade.value;
-                      return Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Yanler Logo
-                          Opacity(
-                            opacity: 1.0 - t,
-                            child: const _YanlerText(),
-                          ),
-                          // 诗词
-                          Opacity(
-                            opacity: t,
-                            child: _PoemDisplay(
-                              poem: _currentPoem,
-                              displayed: _displayedPoem,
-                              typing: _showingPoem &&
-                                  _charIndex < _currentPoem.content.length,
-                              complete: _showingPoem &&
-                                  _charIndex >= _currentPoem.content.length,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                // Yanler Logo
+                Opacity(
+                  opacity: 1.0 - t,
+                  child: const _YanlerText(),
+                ),
+                // 诗词
+                Opacity(
+                  opacity: t,
+                  child: _PoemDisplay(
+                    poem: _currentPoem,
+                    displayed: _displayedPoem,
+                    typing: _showingPoem &&
+                        _charIndex < _currentPoem.content.length,
+                    complete: _showingPoem &&
+                        _charIndex >= _currentPoem.content.length,
                   ),
                 ),
-
-                const SizedBox(height: 36),
-
-                // 搜索框 — 液态玻璃
-                _SearchInput(onSubmit: _onSearch),
-
-                // 搜索框直达 Agent 模式面板
-                if (_agentQuery != null) ...[
-                  const SizedBox(height: 16),
-                  _AgentRunPanel(
-                    key: _agentRunKey,
-                    query: _agentQuery!,
-                    onClose: () => setState(() => _agentQuery = null),
-                  ),
-                ],
-
-                const SizedBox(height: 40),
-
-                // 快捷链接 — Speed Dial
-                const _QuickLinksSection(),
-
-                const SizedBox(height: 56),
               ],
-            ),
-          ),
+            );
+          },
         ),
-      ),
-        ],
       ),
     );
-  }
-
-  void _onSearch(String query) {
-    // 搜索框直达 Agent 模式：Agent 模式下指令型输入直接触发 AI 执行，
-    // 无需跳转独立 AI 聊天页。
-    final ai = context.read<AIProvider>();
-    if (ai.agentMode && _isAgentCommand(query)) {
-      setState(() {
-        _agentRunKey = UniqueKey();
-        _agentQuery = query;
-      });
-      return;
-    }
-    // 常规搜索 / 网址：走统一导航
-    widget.onSearch(query);
-  }
-
-  /// 判定输入是否为 Agent 指令（而非普通搜索词/网址）
-  static bool _isAgentCommand(String input) {
-    final t = input.trim();
-    if (t.startsWith('/')) return true;
-    const triggers = [
-      '帮我',
-      '请帮我',
-      '打开',
-      '点一下',
-      '点击',
-      '输入',
-      '滚动',
-      '翻译',
-      '总结',
-      '介绍一下',
-      '查一下',
-      '搜一下',
-      '找到',
-      '找一下',
-    ];
-    return triggers.any((x) => t.contains(x));
   }
 }
 

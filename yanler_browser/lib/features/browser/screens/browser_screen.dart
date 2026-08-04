@@ -5,13 +5,14 @@ import 'package:provider/provider.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/ai_provider.dart';
+import '../../../providers/ai_panel_controller.dart';
 import '../../../providers/settings_provider.dart';
 import '../../search/search_service.dart';
 import '../../search/instant_answer.dart';
 import '../../search/instant_answer_page.dart';
 import '../../settings/settings_screen.dart';
 import '../../adblock/adblock_engine.dart';
-import '../../ai/ai_chat_screen.dart';
+import '../../ai/ai_panel_sheet.dart';
 import '../../bookmarks/bookmark_service.dart';
 import '../../bookmarks/bookmarks_screen.dart';
 import '../../history/history_service.dart';
@@ -256,8 +257,8 @@ class _BrowserScreenState extends State<BrowserScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Consumer2<BrowserProvider, SettingsProvider>(
-      builder: (context, browser, settings, _) {
+    return Consumer3<BrowserProvider, SettingsProvider, AiPanelController>(
+      builder: (context, browser, settings, panel, _) {
         final isOnNewTab = browser.activeTab?.url.isEmpty ?? true;
         // 仅监听 blockedCount 变化，避免广告拦截内部状态变更导致整棵树重建
         final adblockCount = context.select<AdblockEngine, int>((e) => e.blockedCount);
@@ -279,6 +280,11 @@ class _BrowserScreenState extends State<BrowserScreen>
             _lastActiveIndex = browser.activeTabIndex;
           });
         }
+
+        // 底部栏总高度（顶 6 + 按钮 48 + 底 inset/8），面板半屏时停靠在底栏之上
+        final bottomInset = MediaQuery.paddingOf(context).bottom;
+        final bottomBarHeight =
+            6.0 + 48.0 + (bottomInset > 0 ? bottomInset + 4.0 : 8.0);
 
         return Scaffold(
           body: Stack(
@@ -330,21 +336,36 @@ class _BrowserScreenState extends State<BrowserScreen>
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: BottomBar(
-                  tabCount: browser.tabCount,
-                  isIncognito: browser.isIncognitoMode,
-                  canGoBack: _canGoBack,
-                  canGoForward: _canGoForward,
-                  adBlockCount: adblockCount,
-                  aiActive: aiActive,
-                  onBack: () => _goBack(),
-                  onForward: () => _goForward(),
-                  onHome: () => _goHome(browser),
-                  onAI: () => _openAIChat(context),
-                  onTabSwitch: () => _showTabSwitcher(context),
-                  onMenu: () => _showMenu(context),
+                // 底栏独立 RepaintBoundary：路由过渡/页面重绘时底栏图层不连带重建
+                child: RepaintBoundary(
+                  child: BottomBar(
+                    tabCount: browser.tabCount,
+                    isIncognito: browser.isIncognitoMode,
+                    canGoBack: _canGoBack,
+                    canGoForward: _canGoForward,
+                    adBlockCount: adblockCount,
+                    aiActive: aiActive,
+                    onBack: () => _goBack(),
+                    onForward: () => _goForward(),
+                    onHome: () => _goHome(browser),
+                    onAI: () => _openAIChat(context),
+                    onTabSwitch: () => _showTabSwitcher(context),
+                    onMenu: () => _showMenu(context),
+                  ),
                 ),
               ),
+
+              // AI 助手浮层面板 — 挂载在根部 Stack，位于 WebView/底部栏之上；
+              // 保证切换标签/页面时面板不重建。bottom 停在底部栏上方，
+              // 半屏/全屏切换时底部栏始终可点（再点 AI 按钮可切换形态）。
+              if (panel.mode != AiPanelMode.hidden)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: bottomBarHeight,
+                  child: const AiPanelSheet(),
+                ),
             ],
           ),
         );
@@ -463,12 +484,27 @@ class _BrowserScreenState extends State<BrowserScreen>
     });
   }
 
-  /// 打开 AI 聊天窗口（无论是否已配置，未配置时聊天页内引导）
+  /// 打开 / 切换 AI 助手浮层面板。
+  ///
+  /// 入口规则：
+  /// - 面板已显示 → 在半屏/全屏之间切换；
+  /// - Agent 模式开启，或处于已加载网页的标签 → 默认半屏（保留上方网页区域供观察 AI 操作）；
+  /// - 首页（无网页）→ 默认全屏（保持原有习惯）。
   void _openAIChat(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AIChatScreen()),
-    );
+    final panel = context.read<AiPanelController>();
+    if (panel.mode != AiPanelMode.hidden) {
+      panel.setMode(
+        panel.mode == AiPanelMode.full ? AiPanelMode.half : AiPanelMode.full,
+      );
+      return;
+    }
+    final browser = context.read<BrowserProvider>();
+    final ai = context.read<AIProvider>();
+    final isOnWebPage = browser.activeTab?.url.isNotEmpty ?? false;
+    final openMode = (ai.agentMode || isOnWebPage)
+        ? AiPanelMode.half
+        : AiPanelMode.full;
+    panel.open(openMode);
   }
 }
 

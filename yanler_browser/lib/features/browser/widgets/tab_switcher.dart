@@ -63,8 +63,8 @@ class TabSwitcherSheet extends StatelessWidget {
                               const SizedBox(width: 8),
                               TextButton(
                                 onPressed: () {
+                                  // clearAllTabs 已保证自动新建默认标签页（tabs.length >= 1）
                                   browser.clearAllTabs();
-                                  browser.addTab();
                                   Navigator.pop(context);
                                 },
                                 child: const Text('全部关闭'),
@@ -125,7 +125,12 @@ class TabSwitcherSheet extends StatelessWidget {
                                     Navigator.pop(context);
                                   },
                                   onClose: () {
+                                    final wasLastTab = browser.tabCount <= 1;
                                     browser.closeTab(index);
+                                    // 关闭最后一个标签：自动新建默认标签页并顺畅退出标签管理界面
+                                    if (wasLastTab && context.mounted) {
+                                      Navigator.pop(context);
+                                    }
                                   },
                                 ),
                               ),

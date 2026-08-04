@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -58,6 +58,44 @@ class AIProvider extends ChangeNotifier {
   // Agent 引擎（工具循环）
   AgentEngine? _activeEngine;
   AgentStep? _currentStep;
+
+  /// 输入草稿 — 跨形态（半屏/全屏）、跨关闭重开面板持久保留
+  final TextEditingController inputController = TextEditingController();
+
+  /// 待用户批准的 Agent 命令（面板内执行，用户拥有最高控制权）
+  List<String> _pendingCommands = [];
+  List<String> get pendingCommands => List.unmodifiable(_pendingCommands);
+  void setPendingCommands(List<String> cmds) {
+    _pendingCommands = cmds;
+    notifyListeners();
+  }
+
+  /// Agent 操作日志（最新在前），面板内以消息流形式同步展示 AI 正在执行的步骤
+  final List<String> _agentLog = [];
+  List<String> get agentLog => List.unmodifiable(_agentLog);
+
+  static const Map<String, String> _toolLabels = {
+    'browser_navigate': '打开网页',
+    'browser_search': '搜索',
+    'browser_click': '点击',
+    'browser_type': '输入文字',
+    'browser_scroll': '滚动页面',
+    'browser_back': '返回上一页',
+    'browser_forward': '前进',
+    'browser_reload': '刷新页面',
+    'browser_open_tab': '打开新标签',
+    'browser_close_tab': '关闭标签',
+    'browser_switch_tab': '切换标签',
+    'browser_get_page_text': '读取页面文字',
+    'browser_get_page_screenshot': '页面截图',
+    'browser_get_active_tab': '读取活动标签',
+    'bookmarks_add': '收藏书签',
+    'bookmarks_remove': '删除书签',
+    'bookmarks_list': '查看书签',
+    'history_clear': '清空历史',
+    'settings_set': '修改设置',
+    'adblock_toggle': '切换广告拦截',
+  };
 
   /// 浏览器工具集（由聊天页注入）
   BrowserTools? browserTools;
@@ -217,6 +255,33 @@ class AIProvider extends ChangeNotifier {
     }
   }
 
+  // ==================== Agent 操作日志 ====================
+
+  String _formatStep(AgentStep step) {
+    if (step.phase == 'thinking') return '思考中…';
+    if (step.phase == 'error') return '出错了：${step.detail}';
+    if (step.phase == 'done') return '任务完成';
+    final label = _toolLabels[step.toolName] ??
+        step.toolName.replaceAll('_', ' ');
+    return '执行：$label';
+  }
+
+  void _appendAgentLog(AgentStep step) {
+    final text = _formatStep(step);
+    // 连续同一步骤去重，避免「思考中…」反复刷屏
+    if (_agentLog.isNotEmpty && _agentLog.first == text) return;
+    _agentLog.insert(0, text);
+    if (_agentLog.length > 12) {
+      _agentLog.removeRange(12, _agentLog.length);
+    }
+  }
+
+  void clearAgentLog() {
+    if (_agentLog.isEmpty) return;
+    _agentLog.clear();
+    notifyListeners();
+  }
+
   /// 向 AI 发送消息（支持代理模式；可被 stopGenerating 中止）
   ///
   /// 无论成功、失败、未配置还是被中止，都会把「用户消息 + AI 回复」
@@ -258,6 +323,7 @@ class AIProvider extends ChangeNotifier {
 
   /// Agent 工具循环入口（可被 stopGenerating 中止）
   Future<String> _runAgentLoop(ChatSession session, String userMessage) async {
+    clearAgentLog();
     final engine = AgentEngine(
       apiUrl: _apiUrl,
       apiKey: _apiKey,
@@ -268,6 +334,7 @@ class AIProvider extends ChangeNotifier {
       authorize: authorizeRequest,
       onStep: (step) {
         _currentStep = step;
+        _appendAgentLog(step);
         notifyListeners();
       },
     );
@@ -548,5 +615,11 @@ class AIProvider extends ChangeNotifier {
 
   void clearApiConfig() {
     clearApiKey();
+  }
+
+  @override
+  void dispose() {
+    inputController.dispose();
+    super.dispose();
   }
 }
