@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -22,11 +23,20 @@ class UpdateInfo {
   ///（「提示新版本，装完还是老的」的根因）。为空则跳过校验（向后兼容）。
   final String sha256;
 
+  /// 期望文件大小（字节，来自 GitHub asset size / version.json size）。
+  /// 下载后比对，快速拦截镜像返回的旧包/错误页。为空则跳过。
+  final int? expectedSize;
+
+  /// 期望 versionCode（由 tag 推导，version.json 写入），用于排障日志。
+  final int? expectedVersionCode;
+
   const UpdateInfo({
     required this.version,
     required this.url,
     required this.notes,
     this.sha256 = '',
+    this.expectedSize,
+    this.expectedVersionCode,
   });
 }
 
@@ -92,12 +102,11 @@ class UpdateService {
           best = result;
         } else {
           final bestV = best!['version'] as String? ?? '';
-          // 版本更高 → 替换；版本相同但新结果带 sha256 而旧结果没有 → 替换
-          //（带 sha 的通常是实时镜像/新 version.json，可校验内容新鲜度）
+          // 版本更高 → 替换；版本相同但新结果元数据更丰富（带 sha256/size/versionCode）→ 替换
           final sameVersion = v == bestV;
-          final hasSha = (result['sha256'] as String? ?? '').isNotEmpty;
-          final bestHasSha = (best!['sha256'] as String? ?? '').isNotEmpty;
-          if (_isNewer(v, bestV) || (sameVersion && hasSha && !bestHasSha)) {
+          final score = _richness(result);
+          final bestScore = _richness(best!);
+          if (_isNewer(v, bestV) || (sameVersion && score > bestScore)) {
             best = result;
           }
         }
@@ -144,6 +153,7 @@ class UpdateService {
           final assets = (data['assets'] as List? ?? []);
           String? url;
           String? sha256;
+          int? size;
           for (final a in assets) {
             final name = (a['name'] as String? ?? '').toLowerCase();
             if (name.endsWith('.apk') &&
@@ -151,6 +161,7 @@ class UpdateService {
                 !name.contains('arm64') &&
                 !name.contains('x86_64')) {
               url = a['browser_download_url'] as String?;
+              size = a['size'] as int?;
               // GitHub 资产自带权威 digest（"sha256:<hex>"）。
               // 必须带上：若 CDN 源（jsDelivr/fastly）缓存滞后返回旧版，
               // API 源成为最高版本时若无 sha，下载将跳过 SHA-256 校验，
@@ -168,6 +179,9 @@ class UpdateService {
               'url': url,
               'notes': (data['body'] as String? ?? '').trim(),
               if (sha256 != null && sha256.isNotEmpty) 'sha256': sha256,
+              if (size != null && size > 0) 'size': size,
+              // GitHub API 不直接暴露 versionCode，按 tag 用与发布 workflow 相同公式推导
+              'versionCode': _deriveVersionCode(tag),
             });
             return;
           }
@@ -187,11 +201,32 @@ class UpdateService {
     return completer.future;
   }
 
+  /// 元数据丰富度：带 sha256/size/versionCode 越多越可信（同版本择优用）
+  static int _richness(Map<String, dynamic> r) {
+    var s = 0;
+    if ((r['sha256'] as String? ?? '').isNotEmpty) s++;
+    if (r['size'] is int) s++;
+    if (r['versionCode'] is int) s++;
+    return s;
+  }
+
+  /// 从语义版本号推导单调递增 versionCode（与发布 workflow 同公式：
+  /// 主*1e6 + 次*1e3 + 修订）。GitHub API 源无 versionCode 时用此推导。
+  static int _deriveVersionCode(String v) {
+    final clean = v.replaceFirst(RegExp(r'^v'), '');
+    final parts = clean.split('.');
+    final maj = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 0) : 0;
+    final min = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    final pat = parts.length > 2 ? (int.tryParse(parts[2]) ?? 0) : 0;
+    return maj * 1000000 + min * 1000 + pat;
+  }
+
   /// 检查最新版本。返回 null 表示无更新或检查失败。
   static Future<UpdateCheckResult> checkForUpdates() async {
     try {
       final pkg = await PackageInfo.fromPlatform();
       final current = pkg.version;
+      final currentCode = int.tryParse(pkg.buildNumber) ?? 0;
 
       final info = await _fetchVersionInfo();
       if (info == null) {
@@ -206,13 +241,29 @@ class UpdateService {
 
       final notes = (info['notes'] as String? ?? '').trim();
       final sha256 = (info['sha256'] as String? ?? '').trim().toLowerCase();
+      final size = info['size'] as int?;
+      final versionCode = info['versionCode'] as int?;
+
+      // 版本比较一律用 versionCode 数值比较（有则用），否则退回落版本号语义比较
+      final hasUpdate = (versionCode != null && versionCode > 0)
+          ? versionCode > currentCode
+          : _isNewer(tag, current);
+
+      final vcStr = versionCode?.toString() ?? '?';
+      debugPrint(
+        '[UpdateCheck] 检查结果：远端 tag=$tag versionCode=$vcStr '
+        '当前 v$current($currentCode) → ${hasUpdate ? "有更新" : "无更新"}',
+      );
+
       return UpdateCheckResult(
-        info: _isNewer(tag, current)
+        info: hasUpdate
             ? UpdateInfo(
                 version: tag,
                 url: url,
                 notes: notes,
                 sha256: sha256,
+                expectedSize: size,
+                expectedVersionCode: versionCode,
               )
             : null,
       );
@@ -251,11 +302,19 @@ class UpdateService {
   static Future<String?> downloadAndInstall(
     String url, {
     String expectedSha256 = '',
+    int? expectedSize,
+    int? expectedVersionCode,
+    String expectedVersion = '',
     ValueChanged<double>? onProgress,
     ValueChanged<double>? onSpeed,
   }) async {
     final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/yanler-update.apk');
+    // 每次下载用带时间戳的新临时文件名，禁止复用同名旧文件
+    final file = File(
+      '${dir.path}/yanler-update-${DateTime.now().millisecondsSinceEpoch}.apk',
+    );
+    // 清理历史残留临时包，避免旧文件被误用/堆积
+    await _cleanupStaleDownloads(dir, except: file);
 
     final sources = [url, for (final m in _mirrors) '$m$url'];
     final completer = Completer<String?>();
@@ -329,29 +388,63 @@ class UpdateService {
       } catch (_) {}
     }
 
-    // 最终校验：确保下载下来的是真实 APK（魔数校验），避免损坏包进入安装器
+    // 校验 1：确保是真实 APK（Zip 魔数），避免损坏包进入安装器
     if (!_isValidApk(file)) {
-      try {
-        await file.delete();
-      } catch (_) {}
+      await _deleteQuiet(file);
       return '下载文件校验失败（可能被网络代理替换或下载不完整），请重试';
     }
 
-    // SHA-256 内容校验：防「提示新版本，装完还是老的」。
-    // 部分镜像（ghfast/gh-proxy 等）对同一 Release URL 缓存旧 APK，
-    // 竞速时可能把旧包带进来——魔数校验通过但内容是旧版本。比对哈希可拒绝。
+    // 校验 2：文件大小必须等于 GitHub asset 的 size（快速拦截镜像旧包/错误页）
+    if (expectedSize != null && expectedSize > 0) {
+      final actualSize = file.lengthSync();
+      if (actualSize != expectedSize) {
+        await _deleteQuiet(file);
+        return '下载包大小异常（期望 $expectedSize 字节，实际 $actualSize 字节），'
+            '可能命中镜像缓存的旧包，已取消更新，请稍后重试';
+      }
+    }
+
+    // 校验 3：SHA-256 内容校验（防镜像缓存旧 APK）
     if (expectedSha256.isNotEmpty) {
       final real = _sha256Of(file);
       if (real != expectedSha256.toLowerCase()) {
-        try {
-          await file.delete();
-        } catch (_) {}
+        await _deleteQuiet(file);
         return '安装包校验失败（内容与服务器不一致，可能是镜像缓存的旧包），'
             '请稍后重试';
       }
     }
 
-    // 调起系统安装器（open_filex 内部处理 FileProvider）
+    // 校验 4（核心防线）：解析下载包真实 versionCode，与当前应用数值比较。
+    // 任何校验不通过都不得调起安装器——「装到旧版本」的最后闸门。
+    final curName = await _currentVersionName();
+    final curCode = await _currentVersionCode();
+    final parsed = await _parseDownloadedApk(file.path);
+    final sizeBytes = file.lengthSync();
+    if (parsed == null) {
+      debugPrint('[UpdateCheck] 解析下载包版本失败，拒绝安装');
+      await _deleteQuiet(file);
+      return '无法解析下载的安装包版本，已取消更新';
+    }
+    final actualName = parsed.$1;
+    final actualCode = parsed.$2;
+    final expVcStr = expectedVersionCode?.toString() ?? '?';
+    // 排障信息：期望 tag / 包实际解析版本 / 文件大小（logcat tag UpdateCheck）
+    debugPrint(
+      '[UpdateCheck] 期望 tag=$expectedVersion($expVcStr) '
+      '当前 v$curName($curCode) 下载包实际 v$actualName($actualCode) size=$sizeBytes',
+    );
+
+    if (actualCode < curCode) {
+      await _deleteQuiet(file);
+      return '下载包版本（实际 v$actualName）低于当前版本（v$curName），'
+          '已取消更新';
+    }
+    if (actualCode == curCode) {
+      await _deleteQuiet(file);
+      return '下载包与当前已是相同版本（v$actualName），无需重复安装';
+    }
+
+    // 全部校验通过 → 调起系统安装器（open_filex 内部处理 FileProvider）
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
       final msg = switch (result.type) {
@@ -363,7 +456,86 @@ class UpdateService {
       };
       return '无法打开安装器：$msg';
     }
+    // 安装器读取完成后延迟清理临时包（避免安装进程正在读取时被删）
+    _scheduleCleanup(file);
     return null;
+  }
+
+  /// 解析 APK 版本的 MethodChannel（由 MainActivity 实现，见 Android 侧）
+  static const MethodChannel _apkVersionChannel =
+      MethodChannel('yanler/apk_version');
+
+  /// 当前应用的 versionCode（PackageInfo.buildNumber = pubspec 的 +N）
+  static Future<int> _currentVersionCode() async {
+    try {
+      final pkg = await PackageInfo.fromPlatform();
+      return int.tryParse(pkg.buildNumber) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 当前应用的 versionName
+  static Future<String> _currentVersionName() async {
+    try {
+      final pkg = await PackageInfo.fromPlatform();
+      return pkg.version;
+    } catch (_) {
+      return '?';
+    }
+  }
+
+  /// 用 PackageManager.getPackageArchiveInfo 解析已下载 APK 的真实版本号。
+  /// 返回 (versionName, versionCode)；解析失败/非 APK 返回 null。
+  static Future<(String, int)?> _parseDownloadedApk(String path) async {
+    try {
+      final res = await _apkVersionChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'getApkVersion',
+        {'path': path},
+      );
+      if (res == null) return null;
+      final name = res['versionName'] as String? ?? '';
+      final code = (res['versionCode'] as num?)?.toInt() ?? 0;
+      if (name.isEmpty || code <= 0) return null;
+      return (name, code);
+    } catch (e) {
+      debugPrint('[UpdateCheck] 解析下载包版本失败：$e');
+      return null;
+    }
+  }
+
+  /// 清理历史残留的临时更新包（每次下载前执行，避免堆积/误用旧文件）
+  static Future<void> _cleanupStaleDownloads(
+    Directory dir, {
+    File? except,
+  }) async {
+    try {
+      await for (final e in dir.list()) {
+        if (e is File &&
+            e.path.contains('yanler-update-') &&
+            e.path != except?.path) {
+          try {
+            await e.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// 调起安装器后延迟清理临时包
+  static void _scheduleCleanup(File file) {
+    Timer(const Duration(minutes: 10), () async {
+      try {
+        await file.delete();
+      } catch (_) {}
+    });
+  }
+
+  /// 静默删除（校验失败路径）
+  static Future<void> _deleteQuiet(File file) async {
+    try {
+      await file.delete();
+    } catch (_) {}
   }
 
   /// 计算文件 SHA-256（十六进制小写）。失败返回空串。
@@ -617,6 +789,9 @@ class _UpdateDialog extends StatelessWidget {
     final error = await UpdateService.downloadAndInstall(
       info.url,
       expectedSha256: info.sha256,
+      expectedSize: info.expectedSize,
+      expectedVersionCode: info.expectedVersionCode,
+      expectedVersion: info.version,
       onProgress: (p) => progress.value = p,
       onSpeed: (s) => speed.value = s,
     );

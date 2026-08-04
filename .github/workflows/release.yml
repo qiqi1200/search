@@ -45,8 +45,12 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      # 修复版本号不匹配：确保 pubspec.yaml 版本与 Release 标签严格一致
+      # 版本号唯一来源 = tag。禁止沿用源码里旧的构建号——曾导致多版本
+      # versionCode 都是 2（pubspec 长时间停在 +2），系统安装器把新包判定为
+      # 「同版本/降级」，出现「提示新版本、装完还是老的/装不上」。
+      # versionCode = 主*1e6 + 次*1e3 + 修订（单调递增，随 tag 只增不减）。
       - name: Sync version from tag
+        id: sync
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             RAW="${{ github.event.inputs.version }}"
@@ -55,11 +59,16 @@ jobs:
             TAG="${GITHUB_REF_NAME}"
             VER="${TAG#v}"
           fi
-          # 提取当前 build 号（+ 后面的数字）
-          FULL_VER=$(grep -oP 'version:\s*\K.*' pubspec.yaml | tr -d ' ')
-          BUILD_NUM="${FULL_VER##*+}"
-          sed -i "s/^version: .*/version: ${VER}+${BUILD_NUM}/" pubspec.yaml
-          echo "✅ pubspec.yaml version synced to ${VER}+${BUILD_NUM}"
+          # 从 tag 推导单调递增 versionCode（禁止读取 pubspec 旧构建号）
+          MAJOR="${VER%%.*}"
+          MINOR_TAIL="${VER#*.}"
+          MINOR="${MINOR_TAIL%%.*}"
+          PATCH="${VER##*.}"
+          VCODE=$(( MAJOR * 1000000 + MINOR * 1000 + PATCH ))
+          sed -i "s/^version: .*/version: ${VER}+${VCODE}/" pubspec.yaml
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "versionCode=${VCODE}" >> "$GITHUB_OUTPUT"
+          echo "✅ pubspec.yaml version = ${VER}+${VCODE}（versionName=${VER} / versionCode=${VCODE}）"
 
       - name: Install dependencies
         run: flutter pub get
@@ -150,17 +159,49 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: false
 
+      # 发布后自检（强制）：重新下载刚上传的 asset（走 GitHub API，非缓存），
+      # 用 aapt 解析内部 versionName/versionCode，与 tag 断言一致；
+      # 不一致则 workflow 直接 fail，永久杜绝「tag 是新的、包是旧的/低位版本」。
+      - name: 'Post-release self-check (aapt version audit)'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER="${{ steps.ver.outputs.ver }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          EXPECT_NAME="${VER}"
+          EXPECT_CODE="${{ steps.sync.outputs.versionCode }}"
+          echo "🔎 期望 versionName=${EXPECT_NAME} versionCode=${EXPECT_CODE}"
+          gh release download "${TAG}" -R "${{ github.repository }}" -p "Yanler-${VER}.apk" -D /tmp/audit --clobber
+          APK="/tmp/audit/Yanler-${VER}.apk"
+          AAPT=$(find "$ANDROID_HOME" -name aapt -path '*build-tools*' 2>/dev/null | sort -V | tail -1)
+          if [ -z "$AAPT" ]; then AAPT=$(command -v aapt || true); fi
+          if [ -z "$AAPT" ]; then echo "::error::找不到 aapt，无法自检版本"; exit 1; fi
+          BADGING=$("$AAPT" dump badging "$APK" 2>/dev/null | grep -m1 '^package:')
+          ACTUAL_CODE=$(echo "$BADGING" | grep -oP "versionCode='\K[0-9]+" || true)
+          ACTUAL_NAME=$(echo "$BADGING" | grep -oP "versionName='\K[^']+" || true)
+          echo "✅ 实际 versionName=${ACTUAL_NAME} versionCode=${ACTUAL_CODE}（size=$(stat -c%s "$APK")）"
+          if [ -z "$ACTUAL_CODE" ] || [ -z "$ACTUAL_NAME" ] || \
+             [ "$ACTUAL_CODE" != "$EXPECT_CODE" ] || [ "$ACTUAL_NAME" != "$EXPECT_NAME" ]; then
+            echo "::error::发布自检失败：asset 内部版本与 tag 不一致！"
+            echo "::error::期望 versionName=${EXPECT_NAME} versionCode=${EXPECT_CODE}；实际 versionName=${ACTUAL_NAME} versionCode=${ACTUAL_CODE}"
+            exit 1
+          fi
+          echo "🎉 发布自检通过：asset 内部版本与 tag 严格一致"
+
       # 自动更新 version.json → 推送到 main → jsDelivr CDN 刷新
       # 应用内更新通过 CDN 读取此文件检测新版本（国内无需翻墙）
       # 注意：必须在 checkout main 之后写文件，否则 git checkout 会覆盖刚写入的新内容
       #（旧版 bug：`git checkout ${{ github.sha }} -- version.json` 把新 version.json
       #  还原成 tag 提交里的旧文件，导致 main 上永远是旧版本号，应用内更新检测不到新版本。）
       - name: Update & commit version.json to main
+        env:
+          VCODE: ${{ steps.sync.outputs.versionCode }}
         run: |
           VER="${{ steps.ver.outputs.ver }}"
           TAG="${{ steps.ver.outputs.tag }}"
           APK_URL="https://github.com/qiqi1200/search/releases/download/${TAG}/Yanler-${VER}.apk"
-          BUILD=$(grep -oP 'version:.*\+\K[0-9]+' pubspec.yaml || echo "1")
+          APK_SIZE=$(stat -c%s "release_assets/Yanler-${VER}.apk")
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin main
@@ -168,7 +209,9 @@ jobs:
           cat > version.json << EOF
           {
             "version": "${VER}",
-            "build": ${BUILD},
+            "build": ${VCODE},
+            "versionCode": ${VCODE},
+            "size": ${APK_SIZE},
             "url": "${APK_URL}",
             "sha256": "${{ steps.apk_sha.outputs.sha256 }}",
             "notes": "Yanler ${TAG} 自动发布"
