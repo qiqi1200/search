@@ -44,62 +44,6 @@ class YanlerMotion {
       MediaQuery.disableAnimationsOf(context);
 }
 
-/// 页面过渡：方向感推入 — 新页自右侧 8% 滑入 + 淡入，旧页轻微左移并变暗
-///
-/// 时长 400ms（MaterialPageRoute 提供），进入曲线 cubic-bezier(0.16,1,0.3,1)，
-/// 退出反向 easeIn。只动 transform/opacity（GPU 合成层，不掉帧）。
-/// 与 preview/index.html 的「方向转场」保持一致。
-class YanlerPageTransitionsBuilder extends PageTransitionsBuilder {
-  const YanlerPageTransitionsBuilder();
-
-  @override
-  Widget buildTransitions<T>(
-    PageRoute<T> route,
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    // 尊重系统减弱动效：直出
-    if (MediaQuery.disableAnimationsOf(context)) return child;
-
-    final curved = CurvedAnimation(
-      parent: animation,
-      curve: YanlerMotion.enter,
-      reverseCurve: YanlerMotion.exit,
-    );
-    final secondary = CurvedAnimation(
-      parent: secondaryAnimation,
-      curve: YanlerMotion.enter,
-      reverseCurve: YanlerMotion.exit,
-    );
-
-    // 新页：右 8% → 0，透明度 0.4 → 1
-    final incoming = SlideTransition(
-      position: Tween<Offset>(
-        begin: const Offset(0.08, 0),
-        end: Offset.zero,
-      ).animate(curved),
-      child: FadeTransition(
-        opacity: Tween<double>(begin: 0.4, end: 1.0).animate(curved),
-        child: child,
-      ),
-    );
-
-    // 旧页：被推向左侧 3% 并变暗（secondaryAnimation 0→1 时）
-    return SlideTransition(
-      position: Tween<Offset>(
-        begin: Offset.zero,
-        end: const Offset(-0.03, 0),
-      ).animate(secondary),
-      child: FadeTransition(
-        opacity: Tween<double>(begin: 1.0, end: 0.55).animate(secondary),
-        child: incoming,
-      ),
-    );
-  }
-}
-
 /// 列表交错入场 — 瀑布式浮现
 ///
 /// 每项依次淡入 + 上移 10px，间隔 40ms（克制版，无重阴影）。

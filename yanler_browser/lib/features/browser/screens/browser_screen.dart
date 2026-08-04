@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/snappy_route.dart';
 import '../../../core/utils/nav_bus.dart';
 import '../../../providers/browser_provider.dart';
 import '../../../providers/ai_provider.dart';
@@ -124,7 +125,7 @@ class _BrowserScreenState extends State<BrowserScreen>
         // 命中即时答案 → 展示答案卡片，可在页内「用 Bing 继续搜索」
         final result = await Navigator.push<String>(
           context,
-          MaterialPageRoute(
+          SnappyRoute(
             builder: (_) => InstantAnswerPage(query: trimmed, answer: answer),
           ),
         );
@@ -230,6 +231,10 @@ class _BrowserScreenState extends State<BrowserScreen>
       },
       onLoadingChanged: (loading) {
         browser.setTabLoading(index, loading);
+        // 加载完成（仅活动标签）→ 刷新 AI 上下文头部
+        if (!loading && index == browser.activeTabIndex) {
+          _refreshAiPageContext();
+        }
       },
       onProgressChanged: (progress) {
         // 仅活动标签驱动地址栏进度条
@@ -278,6 +283,8 @@ class _BrowserScreenState extends State<BrowserScreen>
               });
             }
             _lastActiveIndex = browser.activeTabIndex;
+            // 切换标签 → 刷新 AI 上下文头部
+            _refreshAiPageContext();
           });
         }
 
@@ -286,7 +293,13 @@ class _BrowserScreenState extends State<BrowserScreen>
         final bottomBarHeight =
             6.0 + 48.0 + (bottomInset > 0 ? bottomInset + 4.0 : 8.0);
 
+        // 键盘高度：面板打开时由面板自行接管键盘避让（见下方 Positioned.bottom），
+        // 根 Scaffold 不再二次缩体，避免「窗口缩放 + viewInsets」双重避让导致输入框异常跳升。
+        final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
+        final panelVisible = panel.mode != AiPanelMode.hidden;
+
         return Scaffold(
+          resizeToAvoidBottomInset: !panelVisible,
           body: Stack(
             children: [
               // 内容层：地址栏 + 页面（新标签页壁纸 / WebView）。
@@ -332,38 +345,59 @@ class _BrowserScreenState extends State<BrowserScreen>
 
               // 悬浮底部栏：Overlay 叠加在壁纸/网页之上（更高 Z 层级）。
               // 底部栏顶部圆角与两侧透出的是壁纸本身，而非根布局黑底。
+              // 面板打开时 150ms 下滑隐藏（纯位移、无透明度交叉淡化），收起后恢复。
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
                 // 底栏独立 RepaintBoundary：路由过渡/页面重绘时底栏图层不连带重建
-                child: RepaintBoundary(
-                  child: BottomBar(
-                    tabCount: browser.tabCount,
-                    isIncognito: browser.isIncognitoMode,
-                    canGoBack: _canGoBack,
-                    canGoForward: _canGoForward,
-                    adBlockCount: adblockCount,
-                    aiActive: aiActive,
-                    onBack: () => _goBack(),
-                    onForward: () => _goForward(),
-                    onHome: () => _goHome(browser),
-                    onAI: () => _openAIChat(context),
-                    onTabSwitch: () => _showTabSwitcher(context),
-                    onMenu: () => _showMenu(context),
+                child: IgnorePointer(
+                  ignoring: panelVisible,
+                  child: AnimatedSlide(
+                    offset: panelVisible ? const Offset(0, 1) : Offset.zero,
+                    duration: const Duration(milliseconds: 150),
+                    curve: Curves.easeOutCubic,
+                    child: RepaintBoundary(
+                      child: BottomBar(
+                        tabCount: browser.tabCount,
+                        isIncognito: browser.isIncognitoMode,
+                        canGoBack: _canGoBack,
+                        canGoForward: _canGoForward,
+                        adBlockCount: adblockCount,
+                        aiActive: aiActive,
+                        onBack: () => _goBack(),
+                        onForward: () => _goForward(),
+                        onHome: () => _goHome(browser),
+                        onAI: () => _openAIChat(context),
+                        onTabSwitch: () => _showTabSwitcher(context),
+                        onMenu: () => _showMenu(context),
+                      ),
+                    ),
                   ),
                 ),
               ),
 
+              // 浮动胶囊「询问 Yanler AI」— 仅网页态显示，面板打开时隐藏。
+              // 点击走统一入口 _openAIChat（网页内默认半屏）。
+              if (!isOnNewTab && !panelVisible)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: bottomBarHeight + 12,
+                  child: Center(
+                    child: _AskAiCapsule(onTap: () => _openAIChat(context)),
+                  ),
+                ),
+
               // AI 助手浮层面板 — 挂载在根部 Stack，位于 WebView/底部栏之上；
-              // 保证切换标签/页面时面板不重建。bottom 停在底部栏上方，
-              // 半屏/全屏切换时底部栏始终可点（再点 AI 按钮可切换形态）。
-              if (panel.mode != AiPanelMode.hidden)
+              // 保证切换标签/页面时面板不重建。面板打开时底部栏已下滑隐藏，
+              // 面板底部直达屏幕底；键盘弹出时按 viewInsets 顶起（输入栏贴键盘）。
+              if (panelVisible)
                 Positioned(
                   left: 0,
                   right: 0,
                   top: 0,
-                  bottom: bottomBarHeight,
+                  bottom: viewInsets,
                   child: const AiPanelSheet(),
                 ),
             ],
@@ -407,6 +441,15 @@ class _BrowserScreenState extends State<BrowserScreen>
         final adblock = sheetContext.watch<AdblockEngine>();
         final currentUrl = browser.activeTab?.url ?? '';
 
+        // 先让底部菜单面板快速收起（kPanelCloseMs），再执行跳转——
+        // 不让半开的面板参与新路由转场画面，彻底避免「菜单 + 新页」重影。
+        void closeThen(VoidCallback action) {
+          Navigator.pop(sheetContext);
+          Future.delayed(kPanelCloseMs, () {
+            if (context.mounted) action();
+          });
+        }
+
         return _BottomMenuSheet(
           adBlockCount: adblock.blockedCount,
           canBookmark: currentUrl.isNotEmpty,
@@ -415,23 +458,11 @@ class _BrowserScreenState extends State<BrowserScreen>
           isAIActive: ai.agentMode,
           // 开关类操作不关闭菜单，允许用户连续操作；状态经 watch 实时回显
           onToggleTheme: () => settings.toggleTheme(),
-          onOpenSettings: () {
-            Navigator.pop(sheetContext);
-            _openSettings(context);
-          },
+          onOpenSettings: () => closeThen(() => _openSettings(context)),
           onToggleIncognito: () => browser.toggleIncognito(),
-          onToggleAI: () {
-            Navigator.pop(sheetContext);
-            _openAIChat(context);
-          },
-          onOpenBookmarks: () {
-            Navigator.pop(sheetContext);
-            _openBookmarks(context);
-          },
-          onOpenHistory: () {
-            Navigator.pop(sheetContext);
-            _openHistory(context);
-          },
+          onToggleAI: () => closeThen(() => _openAIChat(context)),
+          onOpenBookmarks: () => closeThen(() => _openBookmarks(context)),
+          onOpenHistory: () => closeThen(() => _openHistory(context)),
           onAddBookmark: () {
             final title = browser.activeTab?.title ?? '未命名';
             context.read<BookmarkService>().add(title, currentUrl);
@@ -452,7 +483,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _openBookmarks(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const BookmarksScreen()),
+      SnappyRoute(builder: (_) => const BookmarksScreen()),
     ).then((url) {
       if (url is String && url.isNotEmpty && context.mounted) {
         context.read<BrowserProvider>().addTab(url: url);
@@ -463,7 +494,7 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _openHistory(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const HistoryScreen()),
+      SnappyRoute(builder: (_) => const HistoryScreen()),
     ).then((url) {
       if (url is String && url.isNotEmpty && context.mounted) {
         context.read<BrowserProvider>().addTab(url: url);
@@ -474,13 +505,55 @@ class _BrowserScreenState extends State<BrowserScreen>
   void _openSettings(BuildContext context) {
     Navigator.push(
       context,
-      MaterialPageRoute(
+      SnappyRoute(
         builder: (_) => const SettingsScreen(),
       ),
     ).then((url) {
       if (url is String && url.isNotEmpty && context.mounted) {
         context.read<BrowserProvider>().addTab(url: url);
       }
+    });
+  }
+
+  /// 刷新 AI 面板「上下文头部」数据（favicon / 标题 / 域名）。
+  ///
+  /// 同步部分（标题 / host / url）直接取活动标签状态；favicon 异步从 WebView
+  /// 用 JS 读取 link[rel*=icon]，期间若 URL 已变化则丢弃旧结果。
+  void _refreshAiPageContext() {
+    final browser = context.read<BrowserProvider>();
+    final ai = context.read<AIProvider>();
+    final tab = browser.activeTab;
+    if (tab == null || tab.url.isEmpty) {
+      ai.setPageContext(const {});
+      return;
+    }
+    final host = Uri.tryParse(tab.url)?.host ?? '';
+    final initial = <String, String>{
+      'title': tab.title.isEmpty ? host : tab.title,
+      'host': host,
+      'url': tab.url,
+      'favicon': host.isNotEmpty ? 'https://$host/favicon.ico' : '',
+    };
+    ai.setPageContext(initial);
+
+    final controller = NavBus.active;
+    final urlAtFetch = tab.url;
+    if (controller == null) return;
+    controller
+        .evaluateJavascript('''
+(function(){
+  try {
+    var l = document.querySelector('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]');
+    return l ? (l.href || '') : '';
+  } catch(e) { return ''; }
+})()
+''')
+        .then((href) {
+      if (!mounted || href == null || href.isEmpty) return;
+      if (href.startsWith('data:')) return;
+      final now = context.read<BrowserProvider>().activeTab;
+      if (now == null || now.url != urlAtFetch) return;
+      ai.setPageContext({...initial, 'favicon': href});
     });
   }
 
@@ -501,10 +574,63 @@ class _BrowserScreenState extends State<BrowserScreen>
     final browser = context.read<BrowserProvider>();
     final ai = context.read<AIProvider>();
     final isOnWebPage = browser.activeTab?.url.isNotEmpty ?? false;
+    // 打开前刷新上下文头部（面板首帧即展示正确的 favicon/标题/域名）
+    _refreshAiPageContext();
     final openMode = (ai.agentMode || isOnWebPage)
         ? AiPanelMode.half
         : AiPanelMode.full;
     panel.open(openMode);
+  }
+}
+
+/// 浮动胶囊「询问 Yanler AI」— 网页态显示在底部栏上方，点击打开半屏 AI 面板。
+class _AskAiCapsule extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AskAiCapsule({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF3A5CCC), Color(0xFF2F9E8F)],
+            ),
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF3A5CCC).withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 16, color: Colors.white),
+              SizedBox(width: 7),
+              Text(
+                '询问 Yanler AI',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

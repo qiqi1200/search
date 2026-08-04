@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'yanler_motion.dart';
+import 'snappy_route.dart';
 
 class AppTheme {
   // 品牌主色调 — 黛蓝（Yanler preview 2026-08 改版：单一强调色）
@@ -100,9 +100,9 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: YanlerPageTransitionsBuilder(),
+        TargetPlatform.android: SnappyPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: YanlerPageTransitionsBuilder(),
+        TargetPlatform.windows: SnappyPageTransitionsBuilder(),
       },
     ),
   );
@@ -192,9 +192,9 @@ class AppTheme {
     ),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
-        TargetPlatform.android: YanlerPageTransitionsBuilder(),
+        TargetPlatform.android: SnappyPageTransitionsBuilder(),
         TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        TargetPlatform.windows: YanlerPageTransitionsBuilder(),
+        TargetPlatform.windows: SnappyPageTransitionsBuilder(),
       },
     ),
   );

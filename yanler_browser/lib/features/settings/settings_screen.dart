@@ -10,6 +10,7 @@ import '../../providers/settings_provider.dart';
 import '../../providers/ai_provider.dart';
 import '../../providers/quick_links_provider.dart';
 import '../../core/constants/search_engines.dart';
+import '../../core/theme/snappy_route.dart';
 import '../../core/constants/wallpapers.dart';
 import '../../core/widgets/yanler_surface.dart';
 import '../ai/ai_config_sheet.dart';
@@ -723,7 +724,7 @@ class _SettingsCard extends StatelessWidget {
 void _openListScreen(BuildContext context, Widget screen) {
   Navigator.push(
     context,
-    MaterialPageRoute(builder: (_) => screen),
+    SnappyRoute(builder: (_) => screen),
   ).then((url) {
     if (url is String && url.isNotEmpty && context.mounted) {
       Navigator.pop(context, url);

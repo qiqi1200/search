@@ -8,9 +8,11 @@ import 'ai_config_sheet.dart';
 /// AI 助手浮层面板 — 挂载在浏览器根部 Stack，位于 WebView / 底部栏之上。
 ///
 /// 用 DraggableScrollableSheet 实现：
-/// - initial 0.55（半屏）/ 1.0（全屏），min 0.3，max 1.0，snap [0.55, 1.0]；
+/// - 打开时从 min 0.3 起步，post-frame 以 220ms easeOutCubic 滑入到目标高度
+///   （半屏 0.55 / 全屏 1.0）；纯位移、无透明度交叉淡化；
+/// - min 0.3，max 1.0，snap [0.55, 1.0]；拖到 min 或点关闭 → 下滑收起；
 /// - 半屏时上方网页区域保持可见且可触摸，Agent 模式下用户可实时观察网页操作；
-/// - 全屏⇄半屏由 [DraggableScrollableController] 以 250ms easeOut 动画切换，
+/// - 全屏⇄半屏由 [DraggableScrollableController] 动画切换，
 ///   拖拽横条 / Header 在滚动体内 pin 顶部，可自由拖拽。
 class AiPanelSheet extends StatefulWidget {
   const AiPanelSheet({super.key});
@@ -22,6 +24,10 @@ class AiPanelSheet extends StatefulWidget {
 class _AiPanelSheetState extends State<AiPanelSheet> {
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+
+  /// 面板形态切换 / 滑入动画时长与曲线 — 纯位移、无透明度交叉淡化
+  static const Duration _animateMs = Duration(milliseconds: 220);
+  static const Curve _animateCurve = Curves.easeOutCubic;
 
   /// 程序化动画进行中 — 期间拖拽同步停止，避免动画与用户手势互相覆盖
   bool _animating = false;
@@ -52,6 +58,11 @@ class _AiPanelSheetState extends State<AiPanelSheet> {
     if (_animating || !_sheetController.isAttached) return;
     final panel = context.read<AiPanelController>();
     if (panel.mode == AiPanelMode.hidden) return;
+    // 拖拽下拉到最小高度 → 收起（纯位移下滑，无交叉淡化）
+    if (_sheetController.size <= 0.31) {
+      panel.hide();
+      return;
+    }
     final target = _sheetController.size >= 0.85
         ? AiPanelMode.full
         : AiPanelMode.half;
@@ -73,8 +84,8 @@ class _AiPanelSheetState extends State<AiPanelSheet> {
     _sheetController
         .animateTo(
           target,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
+          duration: _animateMs,
+          curve: _animateCurve,
         )
         .whenComplete(() => _animating = false);
   }
@@ -89,14 +100,31 @@ class _AiPanelSheetState extends State<AiPanelSheet> {
     _sheetController
         .animateTo(
           target == AiPanelMode.full ? 1.0 : 0.55,
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
+          duration: _animateMs,
+          curve: _animateCurve,
         )
         .whenComplete(() => _animating = false);
     context.read<AiPanelController>().setMode(target);
   }
 
-  void _hide() => context.read<AiPanelController>().hide();
+  /// 收起：先 220ms 下滑到最小高度（纯位移），再真正隐藏，避免「弹一下消失」。
+  void _close() {
+    if (!_sheetController.isAttached) {
+      context.read<AiPanelController>().hide();
+      return;
+    }
+    _animating = true;
+    _sheetController
+        .animateTo(
+          0.3,
+          duration: _animateMs,
+          curve: _animateCurve,
+        )
+        .whenComplete(() {
+      _animating = false;
+      if (mounted) context.read<AiPanelController>().hide();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +137,9 @@ class _AiPanelSheetState extends State<AiPanelSheet> {
 
     return DraggableScrollableSheet(
       controller: _sheetController,
-      initialChildSize: isFullscreen ? 1.0 : 0.55,
+      // 首帧从 min 高度起步，post-frame 由 _onModeChanged 动画滑入到目标高度，
+      // 实现「底部抽屉从下方快速滑入」；之后半屏/全屏切换也走同一控制器动画。
+      initialChildSize: 0.3,
       minChildSize: 0.3,
       maxChildSize: 1.0,
       snap: true,
@@ -145,7 +175,7 @@ class _AiPanelSheetState extends State<AiPanelSheet> {
                   ),
                   const SizedBox(height: 10),
                   AiAssistantHeader(
-                    onBack: _hide,
+                    onBack: _close,
                     isFullscreen: isFullscreen,
                     onToggleFullscreen: _toggleFullscreen,
                     onHistory: () =>

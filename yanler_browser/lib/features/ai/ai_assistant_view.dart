@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/yanler_surface.dart';
 import '../../providers/ai_provider.dart';
@@ -9,6 +10,7 @@ import '../bookmarks/bookmark_service.dart';
 import '../history/history_service.dart';
 import 'ai_config_sheet.dart';
 import 'agent_commands.dart';
+import 'web_automation.dart';
 
 /// AI 助手顶部栏 — 半屏面板与全屏页共用（保留原有外观）。
 ///
@@ -176,6 +178,9 @@ class _AiAssistantViewState extends State<AiAssistantView> {
   int _lastMessageCount = 0;
   bool _didInitialScroll = false;
 
+  /// 首页态「已配置」说明卡是否已被用户点「知道了」收起
+  bool _configuredTipDismissed = false;
+
   @override
   void initState() {
     super.initState();
@@ -298,12 +303,51 @@ class _AiAssistantViewState extends State<AiAssistantView> {
     );
   }
 
+  void _showConfig() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => const AIConfigSheet(),
+    );
+  }
+
+  // ==================== 「总结 / 翻译」快捷操作 ====================
+
+  /// 提取当前页正文 → 拼接 prompt → 调 AI（走普通补全，不受 Agent 模式影响）。
+  /// AI 未配置时直接弹出配置页。
+  Future<void> _runPageAction(String action) async {
+    final ai = context.read<AIProvider>();
+    if (!ai.isConfigured) {
+      _showConfig();
+      return;
+    }
+    final browser = context.read<BrowserProvider>();
+    final tab = browser.activeTab;
+    final ctx = ai.pageContext;
+    final title = (ctx['title']?.isNotEmpty ?? false)
+        ? ctx['title']!
+        : ((tab?.title.isNotEmpty ?? false) ? tab!.title : '当前网页');
+    final url = (ctx['url']?.isNotEmpty ?? false) ? ctx['url']! : tab?.url ?? '';
+    final text = (await WebAutomation.getPageText())?.trim() ?? '';
+    final body = text.length > 12000 ? text.substring(0, 12000) : text;
+    if (body.isEmpty) {
+      _toast('未能读取到当前网页内容');
+      return;
+    }
+    final where = title + (url.isNotEmpty ? '（$url）' : '');
+    final prompt = action == 'summarize'
+        ? '请用简洁的中文总结以下网页（$where）的核心内容，分点列出重点，最后给一句话结论：\n\n$body'
+        : '请把以下网页（$where）的内容翻译成通顺的中文，保留关键信息与专有名词：\n\n$body';
+    ai.sendPageTask(prompt);
+  }
+
   // ==================== UI ====================
 
   @override
   Widget build(BuildContext context) {
     final ai = context.watch<AIProvider>();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ctxHost = ai.pageContext['host'] ?? '';
 
     // 新消息到达：首帧强制吸底，之后仅在接近底部时跟随，不打断阅读历史
     if (ai.messages.length != _lastMessageCount) {
@@ -340,27 +384,48 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                   ),
                 ),
 
-              // 未配置提示条
-              if (!ai.isConfigured)
-                SliverToBoxAdapter(
-                  child: _AiTipCard(
-                    onConfig: () => showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (_) => const AIConfigSheet(),
+              // —— 首页态：上下文头部 + 快捷操作 + 信息卡片 ——
+              if (ai.messages.isEmpty) ...[
+                // 当前网页上下文头部（favicon / 标题 / 域名）
+                if (ctxHost.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _AiContextHeader(meta: ai.pageContext),
+                  ),
+                // 快捷操作：总结 / 翻译
+                if (ctxHost.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: _AiQuickActions(
+                      onSummarize: () => _runPageAction('summarize'),
+                      onTranslate: () => _runPageAction('translate'),
                     ),
                   ),
-                ),
-
-              // 消息列表（空态 / 对话气泡）
-              if (ai.messages.isEmpty)
-                SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 220,
-                    child: _AiEmptyChat(agentMode: ai.agentMode),
+                // 信息卡片：未配置 → 去配置；已配置 → 说明 + 知道了
+                if (!ai.isConfigured)
+                  SliverToBoxAdapter(child: _AiTipCard(onConfig: _showConfig))
+                else if (!_configuredTipDismissed)
+                  SliverToBoxAdapter(
+                    child: _AiConfiguredCard(
+                      onDismiss: () => setState(
+                        () => _configuredTipDismissed = true,
+                      ),
+                    ),
                   ),
-                )
-              else
+                // 空态（有网页上下文时给一句轻提示，无则展示完整空态）
+                if (ctxHost.isNotEmpty)
+                  const SliverToBoxAdapter(child: _AiHomeHint())
+                else
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 200,
+                      child: _AiEmptyChat(agentMode: ai.agentMode),
+                    ),
+                  ),
+              ]
+              // —— 对话态：消息列表 ——
+              else ...[
+                // 未配置时仍保留去配置提示条（随时可配置）
+                if (!ai.isConfigured)
+                  SliverToBoxAdapter(child: _AiTipCard(onConfig: _showConfig)),
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
@@ -373,6 +438,7 @@ class _AiAssistantViewState extends State<AiAssistantView> {
                     childCount: ai.messages.length,
                   ),
                 ),
+              ],
 
               // Agent 操作日志（同步展示 AI 正在执行的步骤）
               if (ai.agentLog.isNotEmpty)
@@ -511,6 +577,273 @@ class _AiEmptyChat extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 当前网页上下文头部 — favicon + 页面标题 + 域名
+class _AiContextHeader extends StatelessWidget {
+  final Map<String, String> meta;
+
+  const _AiContextHeader({required this.meta});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final host = meta['host'] ?? '';
+    final title = meta['title'] ?? '';
+    var favicon = meta['favicon'] ?? '';
+    if (favicon.isEmpty && host.isNotEmpty) favicon = 'https://$host/favicon.ico';
+    final showFavicon = favicon.isNotEmpty && !favicon.startsWith('data:');
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+      child: Row(
+        children: [
+          ClipOval(
+            child: SizedBox(
+              width: 36,
+              height: 36,
+              child: showFavicon
+                  ? Image.network(
+                      favicon,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          const _FaviconFallback(),
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const _FaviconFallback();
+                      },
+                    )
+                  : const _FaviconFallback(),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.isEmpty ? host : title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (host.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(
+                      host,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// favicon 加载失败 / 缺省时的地球占位
+class _FaviconFallback extends StatelessWidget {
+  const _FaviconFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      color: theme.colorScheme.surfaceContainerHigh,
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.public_rounded,
+        size: 18,
+        color: theme.colorScheme.primary,
+      ),
+    );
+  }
+}
+
+/// 快捷操作：并排「总结 / 翻译」大圆角按钮
+class _AiQuickActions extends StatelessWidget {
+  final VoidCallback onSummarize;
+  final VoidCallback onTranslate;
+
+  const _AiQuickActions({
+    required this.onSummarize,
+    required this.onTranslate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: _QuickActionButton(
+              icon: Icons.subject_rounded,
+              label: '总结',
+              onTap: onSummarize,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _QuickActionButton(
+              icon: Icons.translate_rounded,
+              label: '翻译',
+              onTap: onTranslate,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionButton extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  State<_QuickActionButton> createState() => _QuickActionButtonState();
+}
+
+class _QuickActionButtonState extends State<_QuickActionButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      onTapDown: (_) {
+        HapticFeedback.lightImpact();
+        setState(() => _pressed = true);
+      },
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          height: 52,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(widget.icon, size: 19, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                widget.label,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 首页态「已配置」说明卡 — 深色「知道了」按钮
+class _AiConfiguredCard extends StatelessWidget {
+  final VoidCallback onDismiss;
+
+  const _AiConfiguredCard({required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Yanler AI 已就绪',
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '点「总结」快速提炼当前网页，点「翻译」把网页译成中文；也可以在下方直接提问。开启 Agent 模式后，我还能帮你操作浏览器。',
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.5,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: isDark
+                    ? const Color(0xFFE8E6E1)
+                    : const Color(0xFF2B2B31),
+                foregroundColor:
+                    isDark ? const Color(0xFF1A1B1E) : Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: onDismiss,
+              child: const Text('知道了', style: TextStyle(fontSize: 12.5)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 有网页上下文时首页态的一句轻提示
+class _AiHomeHint extends StatelessWidget {
+  const _AiHomeHint();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+      child: Text(
+        '选中当前网页，随时提问。开启 Agent 模式后，我还能帮你操作浏览器。',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          height: 1.6,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

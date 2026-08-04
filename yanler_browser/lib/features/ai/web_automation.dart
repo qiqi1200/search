@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../core/utils/nav_bus.dart';
 
 /// 网页自动化 — AI Agent 屏幕操控能力层
@@ -31,6 +32,38 @@ class WebAutomation {
   /// 任意 JS，返回结果字符串
   static Future<String?> evaluate(String script) =>
       _run('($_kEval)(JSON.stringify($script));');
+
+  /// 提取当前页正文（最多 20000 字符）— 「总结/翻译」快捷操作用
+  static Future<String?> getPageText() => _run('''
+(function(){
+  try {
+    return document.body ? document.body.innerText.slice(0, 20000) : '';
+  } catch(e) { return ''; }
+})()
+''');
+
+  /// 提取当前页 favicon / 标题 / 网址（上下文头部用）。
+  /// 返回 Map：{title, url, favicon}，读取失败时为空 Map。
+  static Future<Map<String, String>> getPageMeta() async {
+    final raw = await _run('''
+(function(){
+  try {
+    var l = document.querySelector('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]');
+    var href = l ? (l.href || '') : '';
+    if (!href) href = location.origin + '/favicon.ico';
+    return JSON.stringify({ title: document.title || '', url: location.href, favicon: href });
+  } catch(e) { return ''; }
+})()
+''');
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+    } catch (_) {}
+    return const {};
+  }
 
   static Future<String?> _run(String script) async {
     final controller = NavBus.active;

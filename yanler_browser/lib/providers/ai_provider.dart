@@ -62,6 +62,16 @@ class AIProvider extends ChangeNotifier {
   /// 输入草稿 — 跨形态（半屏/全屏）、跨关闭重开面板持久保留
   final TextEditingController inputController = TextEditingController();
 
+  /// 当前网页上下文（上下文头部/快捷操作用）：{title, host, url, favicon}。
+  /// 由 BrowserScreen 在面板打开 / 页面加载完成 / 切换标签时刷新。
+  Map<String, String> _pageContext = const {};
+  Map<String, String> get pageContext => Map.unmodifiable(_pageContext);
+
+  void setPageContext(Map<String, String> ctx) {
+    _pageContext = ctx;
+    notifyListeners();
+  }
+
   /// 待用户批准的 Agent 命令（面板内执行，用户拥有最高控制权）
   List<String> _pendingCommands = [];
   List<String> get pendingCommands => List.unmodifiable(_pendingCommands);
@@ -318,6 +328,36 @@ class AIProvider extends ChangeNotifier {
       return _runAgentLoop(session, message);
     }
 
+    return _requestCompletion(session);
+  }
+
+  /// 首页快捷操作（总结/翻译）专用：始终走普通补全，不受 Agent 模式影响。
+  ///
+  /// 与 [sendMessage] 相同流程（追加用户消息 + 补全 + 展示回复），
+  /// 但不进入 Agent 工具循环——总结/翻译应一次给出结果。
+  Future<String> sendPageTask(String message) async {
+    if (_isProcessing) stopGenerating();
+
+    var session = activeSession ?? _newSession();
+    // 首条用户消息作为会话标题
+    if (session.messages.isEmpty && session.title == '新对话') {
+      session.title = message.length > 20
+          ? '${message.substring(0, 20)}…'
+          : message;
+    }
+    session.messages.add({'role': 'user', 'content': message});
+    session.updatedAt = DateTime.now();
+    _persistSessions();
+    notifyListeners();
+
+    if (!isConfigured) {
+      const tip = '请先在 AI 助手界面右上角「API 配置」中填写 API Key。';
+      _appendAssistant(tip);
+      return tip;
+    }
+
+    _isProcessing = true;
+    notifyListeners();
     return _requestCompletion(session);
   }
 
